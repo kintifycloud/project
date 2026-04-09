@@ -1,24 +1,25 @@
 import type { MetadataRoute } from "next";
 
-import { siteUrl } from "@/lib/schemas";
 import { seoEntries } from "@/lib/seoData";
 
 export default function sitemap(): MetadataRoute.Sitemap {
+  const baseUrl = "https://kintify.cloud";
+
   const staticRoutes: MetadataRoute.Sitemap = [
     {
-      url: siteUrl,
+      url: baseUrl,
       lastModified: new Date(),
       changeFrequency: "weekly",
       priority: 1,
     },
     {
-      url: `${siteUrl}/fix`,
+      url: `${baseUrl}/fix`,
       lastModified: new Date(),
       changeFrequency: "weekly",
       priority: 0.9,
     },
     {
-      url: `${siteUrl}/api-docs`,
+      url: `${baseUrl}/api-docs`,
       lastModified: new Date(),
       changeFrequency: "monthly",
       priority: 0.7,
@@ -26,7 +27,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
   ];
 
   const seoRoutes: MetadataRoute.Sitemap = seoEntries.map((entry) => ({
-    url: `${siteUrl}/fix/${entry.category}/${entry.issue}`,
+    url: `${baseUrl}/fix/${entry.category}/${entry.issue}`,
     lastModified: new Date(),
     changeFrequency: "monthly" as const,
     priority: 0.8,
