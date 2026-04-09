@@ -55,6 +55,9 @@ function isValidResponse(data: unknown): data is LlmAnalysisResult {
   if (!data || typeof data !== "object") return false;
   const d = data as Record<string, unknown>;
   return (
+    typeof d.category === "string" &&
+    typeof d.problem === "string" &&
+    typeof d.cause === "string" &&
     Array.isArray(d.fix) &&
     Array.isArray(d.prevention) &&
     typeof d.confidence === "number"
@@ -74,24 +77,24 @@ You are a cloud systems expert.
 STRICT RULES:
 
 - Return ONLY valid JSON
-- No markdown
 - No explanation
+- No markdown
+- No extra text
+
+FORMAT:
+{
+"category": "string",
+"problem": "string",
+"cause": "string",
+"fix": ["string"],
+"prevention": ["string"],
+"confidence": 0.0,
+"impact": "Low | Medium | High | Critical",
+"improvement": "string"
+}
 
 Analyze this issue:
 "${cleanInput}"
-
-Return JSON:
-{
-  "category": "performance" | "cost" | "errors" | "ai" | "default",
-  "problem": "...",
-  "cause": "...",
-  "explanation": "...",
-  "fix": ["...", "..."],
-  "prevention": ["...", "..."],
-  "confidence": number,
-  "impact": "Low | Medium | High | Critical",
-  "improvement": "..."
-}
 `;
 
   const controller = new AbortController();
@@ -99,7 +102,7 @@ Return JSON:
 
   try {
     const res = await openai.chat.completions.create({
-      model: "mistralai/mistral-7b-instruct:free",
+      model: "openchat/openchat-7b",
       messages: [
         { role: "system", content: "You are a cloud systems expert. Return ONLY valid JSON." },
         { role: "user", content: prompt },
@@ -110,15 +113,24 @@ Return JSON:
 
     clearTimeout(timeout);
 
+    console.log("RAW RESPONSE:", JSON.stringify(res, null, 2));
+
     const text = res.choices[0]?.message?.content ?? "";
-    const parsed = safeParse(text);
+    console.log("TEXT:", text);
+
+    // Force JSON extraction with regex
+    const jsonMatch = text.match(/{[\s\S]*}/);
+    const parsed = safeParse(jsonMatch ? jsonMatch[0] : "");
 
     if (!isValidResponse(parsed)) {
+      console.error("VALIDATION FAILED:", parsed);
       return fallbackMockResponse(input);
     }
 
+    console.log("SUCCESS RESPONSE:", parsed);
     return parsed;
-  } catch {
+  } catch (err) {
+    console.error("LLM ERROR:", err);
     return fallbackMockResponse(input);
   }
 }
