@@ -4,7 +4,9 @@ import { KeyboardEvent, useCallback, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Loader2 } from "lucide-react";
 
+import { ErrorState } from "@/components/ErrorState";
 import { FixHistory } from "@/components/FixHistory";
+import { LoadingState } from "@/components/LoadingState";
 import { StreamingChatOutput } from "@/components/StreamingChatOutput";
 import { Button } from "@/components/ui/button";
 import type { LlmAnalysisResult } from "@/lib/analyzer";
@@ -20,9 +22,9 @@ type FixInputProps = {
 
 export function FixInput({ className, defaultValue = "", showOutput = true }: FixInputProps) {
   const [input, setInput] = useState(defaultValue);
-  const [result, setResult] = useState<LlmAnalysisResult | null>(null);
+  const [output, setOutput] = useState<LlmAnalysisResult | null>(null);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const submitForm = useCallback(async () => {
     const trimmedInput = input.trim();
@@ -32,9 +34,11 @@ export function FixInput({ className, defaultValue = "", showOutput = true }: Fi
       return;
     }
 
+    setLoading(true);
     setError(null);
-    setResult(null);
-    setIsSubmitting(true);
+    setOutput(null);
+
+    console.log("SUBMITTING:", trimmedInput);
 
     try {
       const response = await fetch("/api/analyze", {
@@ -45,24 +49,37 @@ export function FixInput({ className, defaultValue = "", showOutput = true }: Fi
         body: JSON.stringify({ input: trimmedInput }),
       });
 
+      console.log("API RESPONSE STATUS:", response.status);
+
       if (!response.ok) {
         const err = (await response.json().catch(() => null)) as { error?: string } | null;
         throw new Error(err?.error || "Could not analyze issue. Try again.");
       }
 
       const data = (await response.json()) as LlmAnalysisResult;
+      console.log("API RESPONSE DATA:", data);
+
       const generatedSlug = slugify(trimmedInput);
-      setResult(data);
+      setOutput(data);
       saveToHistory({
         input: trimmedInput,
         slug: generatedSlug,
         problem: data.problem,
         timestamp: Date.now(),
       });
+
+      // Scroll to output after result
+      setTimeout(() => {
+        window.scrollTo({
+          top: document.body.scrollHeight,
+          behavior: "smooth",
+        });
+      }, 100);
     } catch (err) {
+      console.error("API ERROR:", err);
       setError(err instanceof Error ? err.message : "Could not analyze issue. Try again.");
     } finally {
-      setIsSubmitting(false);
+      setLoading(false);
     }
   }, [input]);
 
@@ -85,7 +102,7 @@ export function FixInput({ className, defaultValue = "", showOutput = true }: Fi
         <textarea
           aria-label="Describe your system issue"
           className="min-h-[140px] w-full resize-none rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3 text-sm text-white placeholder:text-zinc-500 focus:border-zinc-700 focus:outline-none focus:ring-1 focus:ring-zinc-700"
-          disabled={isSubmitting}
+          disabled={loading}
           onChange={(event) => setInput(event.target.value)}
           onKeyDown={handleKeyDown}
           placeholder="Paste logs, errors, or describe your issue..."
@@ -95,16 +112,16 @@ export function FixInput({ className, defaultValue = "", showOutput = true }: Fi
         <div className="flex flex-col gap-3 sm:flex-row sm:justify-between">
           <Button
             className="w-full sm:w-auto"
-            disabled={isSubmitting || !input.trim()}
+            disabled={loading || !input.trim()}
             onClick={() => void submitForm()}
             type="button"
           >
-            {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+            {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
             Fix Issue
           </Button>
           <Button
             className="w-full sm:w-auto"
-            disabled={isSubmitting}
+            disabled={loading}
             onClick={handleTrySample}
             type="button"
             variant="outline"
@@ -114,35 +131,33 @@ export function FixInput({ className, defaultValue = "", showOutput = true }: Fi
         </div>
       </div>
 
-      {/* Loading State */}
-      {isSubmitting ? (
-        <div className="flex flex-col items-center justify-center gap-3 py-12">
-          <Loader2 className="h-8 w-8 animate-spin text-zinc-400" />
-          <p className="text-base font-medium text-white">Kintify is analyzing your system...</p>
+      {/* Output Section - Always renders based on state */}
+      {showOutput && (
+        <div className="mx-auto w-full max-w-3xl mt-8 sm:mt-10">
+          {loading && <LoadingState />}
+          {error && <ErrorState message={error} onRetry={() => void submitForm()} />}
+          {output && (
+            <AnimatePresence mode="wait">
+              <motion.div
+                key="output"
+                animate={{ opacity: 1, y: 0 }}
+                className="space-y-4 sm:space-y-6"
+                exit={{ opacity: 0, y: -8 }}
+                initial={{ opacity: 0, y: 8 }}
+                transition={{ duration: 0.35 }}
+              >
+                <StreamingChatOutput
+                  onRefine={(newInput) => {
+                    setInput(newInput);
+                    void submitForm();
+                  }}
+                  result={output}
+                />
+              </motion.div>
+            </AnimatePresence>
+          )}
         </div>
-      ) : null}
-
-      {/* Output Section */}
-      {showOutput && result ? (
-        <AnimatePresence mode="wait">
-          <motion.div
-            key="output"
-            animate={{ opacity: 1, y: 0 }}
-            className="mx-auto w-full max-w-3xl mt-8 sm:mt-10 space-y-4 sm:space-y-6"
-            exit={{ opacity: 0, y: -8 }}
-            initial={{ opacity: 0, y: 8 }}
-            transition={{ duration: 0.35 }}
-          >
-            <StreamingChatOutput
-              onRefine={(newInput) => {
-                setInput(newInput);
-                void submitForm();
-              }}
-              result={result}
-            />
-          </motion.div>
-        </AnimatePresence>
-      ) : null}
+      )}
 
       {/* History (hidden for cleaner UI - can be shown via toggle) */}
       <FixHistory />
