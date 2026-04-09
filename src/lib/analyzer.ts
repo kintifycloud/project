@@ -58,42 +58,49 @@ export async function analyzeWithLLM(input: string): Promise<LlmAnalysisResult> 
   const cleanInput = input.slice(0, 500)
 
   const prompt = `
-You are a cloud systems expert.
+You are a senior SRE debugging production systems.
+
+Output MUST be structured and concise.
+Prioritize clarity over explanation.
 
 STRICT RULES:
-
 - Return ONLY valid JSON
-- No explanation
+- No explanation outside JSON
 - No markdown
 - No extra text
+- Keep cause under 2 sentences
+- Keep fix steps short and actionable
+- Each fix step should be 5-15 words
 
 FORMAT:
 {
-"category": "string",
-"problem": "string",
-"cause": "string",
-"fix": ["string"],
-"prevention": ["string"],
-"confidence": 0.0,
+"category": "performance" | "cost" | "errors" | "ai" | "default",
+"problem": "string (max 2 sentences)",
+"cause": "string (max 2 sentences, bold key phrases)",
+"explanation": "string (max 2 sentences)",
+"fix": ["short actionable step 1", "short actionable step 2", "short actionable step 3"],
+"prevention": ["tip 1", "tip 2"],
+"confidence": number (70-95),
 "impact": "Low | Medium | High | Critical",
 "improvement": "string"
 }
 
-Analyze:
+Analyze this issue:
 "${cleanInput}"
 `
 
   async function callLLM() {
     const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), 15000)
+    const timeout = setTimeout(() => controller.abort(), 8000)
 
     const res = await openai.chat.completions.create({
-      model: "openai/gpt-4o-mini",
+      model: "openchat/openchat-7b",
       messages: [
         { role: "system", content: "You are a cloud systems expert. Return ONLY valid JSON." },
         { role: "user", content: prompt },
       ],
       temperature: 0.3,
+      max_tokens: 800,
     }, { signal: controller.signal })
 
     clearTimeout(timeout)

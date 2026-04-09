@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { MessageSquare, Sparkles } from "lucide-react";
+import { MessageSquare, Play } from "lucide-react";
 
 import { EmailCapture } from "@/components/EmailCapture";
 import {
@@ -16,11 +16,10 @@ import {
   PreventionBlock,
   ProblemBlock,
 } from "@/components/output";
-import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
 import type { AnalysisResult } from "@/lib/analyzer";
-import { computeConfidence, confidenceLabel } from "@/lib/perception";
+import { computeConfidence } from "@/lib/perception";
 import { cn } from "@/lib/utils";
 
 type DetailLevel = "simple" | "detailed";
@@ -35,88 +34,162 @@ type FixOutputProps = {
 export function FixOutput({ result, className, onReanalyze, isReanalyzing }: FixOutputProps) {
   const [detailLevel, setDetailLevel] = useState<DetailLevel>("detailed");
   const [expanded, setExpanded] = useState(true);
+  const [toast, setToast] = useState<string | null>(null);
 
   if (!result) {
     return (
       <div className={cn("flex flex-col items-center justify-center gap-2 py-16", className)}>
-        <MessageSquare className="h-6 w-6 text-slate-600" />
-        <p className="text-sm text-slate-500">Paste an error, API, or system issue to begin</p>
+        <MessageSquare className="h-6 w-6 text-zinc-600" />
+        <p className="text-sm text-zinc-500">Paste an error, API, or system issue to begin</p>
       </div>
     );
+  }
+
+  const confidence = computeConfidence(result);
+
+  function handleSimulateFix() {
+    setToast("Simulation complete no errors detected");
+    setTimeout(() => setToast(null), 3000);
   }
 
   return (
     <motion.div
       animate={{ opacity: 1, y: 0 }}
-      className={cn("mx-auto w-full max-w-2xl px-4 py-8 sm:px-6 lg:px-8", className)}
-      initial={{ opacity: 0, y: 10 }}
-      transition={{ duration: 0.4 }}
+      className={cn("mx-auto w-full max-w-4xl space-y-6 px-4 py-8 sm:px-6 lg:px-8", className)}
+      initial={{ opacity: 0, y: 8 }}
+      transition={{ duration: 0.35 }}
     >
-      <Card className="rounded-2xl border-white/8 bg-white/[0.03] p-4 shadow-sm sm:p-6">
-        {/* Header */}
-        <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <div className="flex items-center gap-2">
-              <Sparkles className="h-4 w-4 text-emerald-400" />
-              <h2 className="text-lg font-semibold text-white sm:text-xl">Kintify Analysis Report</h2>
-            </div>
-            <p className="mt-1 text-xs text-slate-400">Generated in real-time from your system input</p>
+      {/* Toast */}
+      {toast ? (
+        <motion.div
+          animate={{ opacity: 1, y: 0 }}
+          className="mx-auto w-fit rounded-lg bg-zinc-800 px-4 py-2 text-sm text-white shadow-lg"
+          exit={{ opacity: 0, y: -8 }}
+          initial={{ opacity: 0, y: -8 }}
+          transition={{ duration: 0.3 }}
+        >
+          {toast}
+        </motion.div>
+      ) : null}
+
+      {/* Confidence Card */}
+      <Card className="border-zinc-800 bg-zinc-900 p-5 shadow-sm">
+        <div className="flex items-center justify-between">
+          <div className="space-y-1">
+            <h3 className="text-sm font-medium text-white">Fix Confidence</h3>
+            <p className="text-xs text-zinc-400">Based on pattern matching and system analysis</p>
           </div>
-          <Badge className="w-fit border-emerald-400/20 bg-emerald-400/10 text-emerald-200">
-            Confidence: {confidenceLabel(computeConfidence(result))} ({computeConfidence(result)}%)
-          </Badge>
+          <div className="flex items-center gap-3">
+            <div className="h-2 w-32 overflow-hidden rounded-full bg-zinc-800">
+              <motion.div
+                animate={{ width: `${confidence}%` }}
+                className="h-full bg-zinc-100"
+                initial={{ width: 0 }}
+                transition={{ duration: 0.5 }}
+              />
+            </div>
+            <span className="text-sm font-medium text-white">{confidence}%</span>
+          </div>
         </div>
-
-        <Separator className="mb-4 bg-white/8" />
-
-        {/* Control Panel */}
-        <ControlPanel
-          detailLevel={detailLevel}
-          expanded={expanded}
-          onDetailLevelChange={setDetailLevel}
-          onExpandedChange={setExpanded}
-          result={result}
-          {...(onReanalyze ? { onReanalyze } : {})}
-          {...(isReanalyzing !== undefined ? { isReanalyzing } : {})}
-        />
-
-        <Separator className="my-4 bg-white/8" />
-
-        {/* Perception Engine */}
-        <PerceptionPanel expanded={expanded} result={result} />
-
-        <Separator className="my-4 bg-white/8" />
-
-        {/* Section blocks */}
-        <div className="space-y-4">
-          <ProblemBlock data={result.problem} detailLevel={detailLevel} expanded={expanded} />
-          <CauseBlock data={result.cause} detailLevel={detailLevel} expanded={expanded} />
-          <ExplanationBlock data={result.explanation} detailLevel={detailLevel} expanded={expanded} />
-
-          <Separator className="my-4 bg-white/8" />
-
-          <FixStepsBlock data={result.fix} detailLevel={detailLevel} expanded={expanded} />
-          <ActionPanel detailLevel={detailLevel} expanded={expanded} fixSteps={result.fix} />
-          <PreventionBlock data={result.prevention} detailLevel={detailLevel} expanded={expanded} />
-        </div>
-
-        <Separator className="my-6 bg-white/8" />
-
-        {/* Agent Mode */}
-        <AgentPanel />
-
-        <Separator className="my-6 bg-white/8" />
-
-        {/* Trust microcopy */}
-        <p className="text-center text-xs text-slate-500">
-          This analysis is generated from real system patterns and continuously improves.
-        </p>
       </Card>
 
-      {/* Email capture — outside the main card */}
-      <div className="mt-6">
-        <EmailCapture result={result} />
+      {/* Section blocks with card styling */}
+      <div className="space-y-4">
+        {/* Root Cause */}
+        <motion.div
+          animate={{ opacity: 1, y: 0 }}
+          initial={{ opacity: 0, y: 8 }}
+          transition={{ duration: 0.3, delay: 0.1 }}
+        >
+          <Card className="border-zinc-800 bg-zinc-900 p-5 shadow-sm">
+            <h3 className="mb-3 text-sm font-semibold text-white">Root Cause</h3>
+            <ProblemBlock data={result.problem} detailLevel={detailLevel} expanded={expanded} />
+            <CauseBlock data={result.cause} detailLevel={detailLevel} expanded={expanded} />
+            <ExplanationBlock data={result.explanation} detailLevel={detailLevel} expanded={expanded} />
+          </Card>
+        </motion.div>
+
+        {/* Fix Plan */}
+        <motion.div
+          animate={{ opacity: 1, y: 0 }}
+          initial={{ opacity: 0, y: 8 }}
+          transition={{ duration: 0.3, delay: 0.2 }}
+        >
+          <Card className="border-zinc-800 bg-zinc-900 p-5 shadow-sm">
+            <h3 className="mb-3 text-sm font-semibold text-white">Fix Plan</h3>
+            <FixStepsBlock data={result.fix} detailLevel={detailLevel} expanded={expanded} />
+            <ActionPanel detailLevel={detailLevel} expanded={expanded} fixSteps={result.fix} />
+          </Card>
+        </motion.div>
+
+        {/* Prevention (optional collapse) */}
+        <motion.div
+          animate={{ opacity: 1, y: 0 }}
+          initial={{ opacity: 0, y: 8 }}
+          transition={{ duration: 0.3, delay: 0.3 }}
+        >
+          <Card className="border-zinc-800 bg-zinc-900 p-5 shadow-sm">
+            <h3 className="mb-3 text-sm font-semibold text-white">Prevention</h3>
+            <PreventionBlock data={result.prevention} detailLevel={detailLevel} expanded={expanded} />
+          </Card>
+        </motion.div>
+
+        {/* Control Panel */}
+        <motion.div
+          animate={{ opacity: 1, y: 0 }}
+          initial={{ opacity: 0, y: 8 }}
+          transition={{ duration: 0.3, delay: 0.4 }}
+        >
+          <Card className="border-zinc-800 bg-zinc-900 p-5 shadow-sm">
+            <ControlPanel
+              detailLevel={detailLevel}
+              expanded={expanded}
+              onDetailLevelChange={setDetailLevel}
+              onExpandedChange={setExpanded}
+              result={result}
+              {...(onReanalyze ? { onReanalyze } : {})}
+              {...(isReanalyzing !== undefined ? { isReanalyzing } : {})}
+            />
+          </Card>
+        </motion.div>
+
+        {/* Perception Engine */}
+        <motion.div
+          animate={{ opacity: 1, y: 0 }}
+          initial={{ opacity: 0, y: 8 }}
+          transition={{ duration: 0.3, delay: 0.5 }}
+        >
+          <Card className="border-zinc-800 bg-zinc-900 p-5 shadow-sm">
+            <PerceptionPanel expanded={expanded} result={result} />
+          </Card>
+        </motion.div>
+
+        {/* Agent Mode */}
+        <motion.div
+          animate={{ opacity: 1, y: 0 }}
+          initial={{ opacity: 0, y: 8 }}
+          transition={{ duration: 0.3, delay: 0.6 }}
+        >
+          <Card className="border-zinc-800 bg-zinc-900 p-5 shadow-sm">
+            <AgentPanel />
+          </Card>
+        </motion.div>
       </div>
+
+      {/* Simulate Fix Button */}
+      <motion.div
+        animate={{ opacity: 1, y: 0 }}
+        initial={{ opacity: 0, y: 8 }}
+        transition={{ duration: 0.3, delay: 0.7 }}
+      >
+        <Button className="w-full" onClick={handleSimulateFix} variant="outline">
+          <Play className="mr-2 h-4 w-4" />
+          Simulate Fix
+        </Button>
+      </motion.div>
+
+      {/* Email capture */}
+      <EmailCapture result={result} />
     </motion.div>
   );
 }

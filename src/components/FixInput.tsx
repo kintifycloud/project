@@ -1,16 +1,12 @@
 "use client";
 
-import { FormEvent, KeyboardEvent, useCallback, useState } from "react";
+import { KeyboardEvent, useCallback, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Loader2, Sparkles } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { Loader2 } from "lucide-react";
 
 import { FixHistory } from "@/components/FixHistory";
-import { FixOutput } from "@/components/FixOutput";
-import { FixOutputAnimated } from "@/components/FixOutputAnimated";
-import { Badge } from "@/components/ui/badge";
+import { StreamingChatOutput } from "@/components/StreamingChatOutput";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import type { LlmAnalysisResult } from "@/lib/analyzer";
 import { saveToHistory } from "@/lib/history";
 import { slugify } from "@/lib/store";
@@ -23,10 +19,8 @@ type FixInputProps = {
 };
 
 export function FixInput({ className, defaultValue = "", showOutput = true }: FixInputProps) {
-  const router = useRouter();
   const [input, setInput] = useState(defaultValue);
   const [result, setResult] = useState<LlmAnalysisResult | null>(null);
-  const [slug, setSlug] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -40,7 +34,6 @@ export function FixInput({ className, defaultValue = "", showOutput = true }: Fi
 
     setError(null);
     setResult(null);
-    setSlug(null);
     setIsSubmitting(true);
 
     try {
@@ -54,13 +47,12 @@ export function FixInput({ className, defaultValue = "", showOutput = true }: Fi
 
       if (!response.ok) {
         const err = (await response.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(err?.error || "Unable to analyze. Try again.");
+        throw new Error(err?.error || "Could not analyze issue. Try again.");
       }
 
       const data = (await response.json()) as LlmAnalysisResult;
       const generatedSlug = slugify(trimmedInput);
       setResult(data);
-      setSlug(generatedSlug);
       saveToHistory({
         input: trimmedInput,
         slug: generatedSlug,
@@ -68,20 +60,11 @@ export function FixInput({ className, defaultValue = "", showOutput = true }: Fi
         timestamp: Date.now(),
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong. Try again.");
+      setError(err instanceof Error ? err.message : "Could not analyze issue. Try again.");
     } finally {
       setIsSubmitting(false);
     }
   }, [input]);
-
-  function handleAnimationComplete() {
-    if (slug) router.push(`/fix/${slug}` as never);
-  }
-
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    await submitForm();
-  }
 
   function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     if (event.key === "Enter" && !event.shiftKey) {
@@ -90,80 +73,78 @@ export function FixInput({ className, defaultValue = "", showOutput = true }: Fi
     }
   }
 
+  function handleTrySample() {
+    setInput("Kubernetes pod restarts frequently with high memory usage and occasional CPU spikes");
+    setError(null);
+  }
+
   return (
     <div className={cn("space-y-6 sm:space-y-8", className)}>
-      <Card className="rounded-xl border-white/8 bg-slate-950/80 shadow-sm">
-        <CardHeader>
-          <Badge className="w-fit gap-2" variant="secondary">
-            <Sparkles className="h-3.5 w-3.5" />
-            /fix cloud debugging tool
-          </Badge>
-          <CardTitle className="text-2xl">Paste a system issue and get a likely fix</CardTitle>
-          <CardDescription>
-            Use plain English, logs, API symptoms, or infrastructure errors. The analyzer returns a fast structured diagnosis.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form className="space-y-4" onSubmit={handleSubmit}>
-            <textarea
-              aria-label="Describe your system issue"
-              className="min-h-36 w-full rounded-[24px] border border-white/10 bg-white/[0.03] px-4 py-4 text-sm leading-7 text-white outline-none transition-colors placeholder:text-slate-500 focus:border-emerald-300/40"
-              onChange={(event) => setInput(event.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Paste your error, API, or system issue..."
-              value={input}
-            />
-            {error ? <p className="text-sm text-rose-300">{error}</p> : null}
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-xs text-slate-500">Enter to submit · Shift+Enter for new line</p>
-              <Button aria-label="Analyze issue" className="w-full sm:w-auto" disabled={isSubmitting} size="lg" type="submit">
-                {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                Analyze issue
-              </Button>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
+      {/* Input Section */}
+      <div className="space-y-4">
+        <textarea
+          aria-label="Describe your system issue"
+          className="min-h-[140px] w-full resize-none rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3 text-sm text-white placeholder:text-zinc-500 focus:border-zinc-700 focus:outline-none focus:ring-1 focus:ring-zinc-700"
+          disabled={isSubmitting}
+          onChange={(event) => setInput(event.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder="Paste logs, errors, or describe your issue..."
+          value={input}
+        />
+        {error ? <p className="text-sm text-rose-400">{error}</p> : null}
+        <div className="flex flex-col gap-3 sm:flex-row sm:justify-between">
+          <Button
+            className="w-full sm:w-auto"
+            disabled={isSubmitting || !input.trim()}
+            onClick={() => void submitForm()}
+            type="button"
+          >
+            {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+            Fix Issue
+          </Button>
+          <Button
+            className="w-full sm:w-auto"
+            disabled={isSubmitting}
+            onClick={handleTrySample}
+            type="button"
+            variant="outline"
+          >
+            Try Sample
+          </Button>
+        </div>
+      </div>
 
-      {showOutput ? (
+      {/* Loading State */}
+      {isSubmitting ? (
+        <div className="flex flex-col items-center justify-center gap-3 py-12">
+          <Loader2 className="h-8 w-8 animate-spin text-zinc-400" />
+          <p className="text-base font-medium text-white">Kintify is analyzing your system...</p>
+        </div>
+      ) : null}
+
+      {/* Output Section */}
+      {showOutput && result ? (
         <AnimatePresence mode="wait">
-          {isSubmitting ? (
-            <motion.div
-              key="loading"
-              animate={{ opacity: 1, y: 0 }}
-              className="flex flex-col items-center justify-center gap-3 py-16"
-              exit={{ opacity: 0, y: -8 }}
-              initial={{ opacity: 0, y: 8 }}
-              transition={{ duration: 0.3 }}
-            >
-              <Loader2 className="h-8 w-8 animate-spin text-emerald-400" />
-              <p className="text-base font-medium text-white">Analyzing with Kintify AI...</p>
-              <p className="text-sm text-slate-400">Running intelligent diagnostics on your system issue...</p>
-            </motion.div>
-          ) : result ? (
-            <motion.div
-              key="animated-output"
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              initial={{ opacity: 0, y: 8 }}
-              transition={{ duration: 0.35 }}
-            >
-              <FixOutputAnimated onComplete={handleAnimationComplete} result={result} />
-            </motion.div>
-          ) : (
-            <motion.div
-              key="empty"
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              initial={{ opacity: 0, y: 8 }}
-              transition={{ duration: 0.35 }}
-            >
-              <FixOutput result={null} />
-            </motion.div>
-          )}
+          <motion.div
+            key="output"
+            animate={{ opacity: 1, y: 0 }}
+            className="mx-auto w-full max-w-3xl mt-8 sm:mt-10 space-y-4 sm:space-y-6"
+            exit={{ opacity: 0, y: -8 }}
+            initial={{ opacity: 0, y: 8 }}
+            transition={{ duration: 0.35 }}
+          >
+            <StreamingChatOutput
+              onRefine={(newInput) => {
+                setInput(newInput);
+                void submitForm();
+              }}
+              result={result}
+            />
+          </motion.div>
         </AnimatePresence>
       ) : null}
 
+      {/* History (hidden for cleaner UI - can be shown via toggle) */}
       <FixHistory />
     </div>
   );

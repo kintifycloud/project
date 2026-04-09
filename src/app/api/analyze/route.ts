@@ -12,7 +12,7 @@ export async function POST(req: Request) {
 
   } catch {
     return NextResponse.json({
-      error: "API failed",
+      error: "Could not analyze issue. Try again.",
     })
   }
 }
