@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { FAQSection } from "@/components/FAQSection";
 import { FeaturesSection } from "@/components/FeaturesSection";
 import { FixInput } from "@/components/FixInput";
+import { Footer } from "@/components/Footer";
 import { Hero } from "@/components/Hero";
 import { HowItWorksSection } from "@/components/HowItWorksSection";
 import { PainSection } from "@/components/PainSection";
@@ -28,6 +29,7 @@ export default function HomePage() {
       <ProofSection />
       <FeaturesSection />
       <FAQSection />
+      <Footer />
     </main>
   );
 }

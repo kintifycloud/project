@@ -39,15 +39,18 @@ function safeParse(text: string) {
   }
 }
 
-function isValidResponse(data: any): data is LlmAnalysisResult {
+function isValidResponse(data: unknown): data is LlmAnalysisResult {
+  if (!data || typeof data !== "object") return false
+
+  const d = data as LlmAnalysisResult
+
   return (
-    data &&
-    typeof data.category === "string" &&
-    typeof data.problem === "string" &&
-    typeof data.cause === "string" &&
-    Array.isArray(data.fix) &&
-    Array.isArray(data.prevention) &&
-    typeof data.confidence === "number"
+    typeof d.category === "string" &&
+    typeof d.problem === "string" &&
+    typeof d.cause === "string" &&
+    Array.isArray(d.fix) &&
+    Array.isArray(d.prevention) &&
+    typeof d.confidence === "number"
   )
 }
 
