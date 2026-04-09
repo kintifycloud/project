@@ -2,10 +2,11 @@
 
 import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Check, ClipboardCopy, Play, Terminal } from "lucide-react";
+import { Check, CheckSquare, ClipboardCopy, Copy, Play, ShieldAlert, Square, Terminal } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -21,6 +22,7 @@ type ActionItem = {
 type ActionPanelProps = {
   fixSteps: string[];
   expanded?: boolean;
+  detailLevel?: "simple" | "detailed";
 };
 
 /* ------------------------------------------------------------------ */
@@ -276,6 +278,45 @@ function matchActions(fixSteps: string[]): ActionItem[] {
 /*  CopyButton                                                         */
 /* ------------------------------------------------------------------ */
 
+function CopyButton({ text, label = "Copy" }: { text: string; label?: string }) {
+  const [copied, setCopied] = useState(false);
+
+  async function handleCopy() {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // clipboard blocked
+    }
+  }
+
+  return (
+    <button
+      aria-label={label}
+      className="inline-flex items-center gap-1 rounded-md border border-white/8 bg-white/[0.04] px-2 py-1 text-[10px] text-slate-500 transition-colors hover:bg-white/[0.08] hover:text-slate-300"
+      onClick={handleCopy}
+      type="button"
+    >
+      {copied ? (
+        <>
+          <Check className="h-3 w-3 text-emerald-400" />
+          <span className="text-emerald-400">Copied</span>
+        </>
+      ) : (
+        <>
+          {label === "Copy Code" ? (
+            <ClipboardCopy className="h-3 w-3" />
+          ) : (
+            <Copy className="h-3 w-3" />
+          )}
+          <span>{label}</span>
+        </>
+      )}
+    </button>
+  );
+}
+
 function CopySnippetButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
 
@@ -305,20 +346,54 @@ function CopySnippetButton({ text }: { text: string }) {
 /*  ActionPanel                                                        */
 /* ------------------------------------------------------------------ */
 
-export function ActionPanel({ fixSteps, expanded = true }: ActionPanelProps) {
-  const actions = matchActions(fixSteps);
+export function ActionPanel({ fixSteps, expanded = true, detailLevel = "detailed" }: ActionPanelProps) {
+  const allActions = matchActions(fixSteps);
+  const actions = detailLevel === "simple" ? allActions.slice(0, 2) : allActions;
+  const [completed, setCompleted] = useState<Set<string>>(new Set());
+
+  function toggleDone(label: string) {
+    setCompleted((prev) => {
+      const next = new Set(prev);
+      if (next.has(label)) next.delete(label);
+      else next.add(label);
+      return next;
+    });
+  }
+
+  const doneCount = completed.size;
 
   if (actions.length === 0) return null;
 
   return (
     <Card className="rounded-xl border-emerald-400/10 bg-emerald-400/[0.02] shadow-sm">
       <CardContent className="p-4 sm:p-6">
+        {/* Header */}
         <div className="mb-4 flex items-center gap-2">
           <Play className="h-4 w-4 text-emerald-400" />
           <span className="text-sm font-semibold text-white">Action Plan</span>
           <Badge className="ml-auto border-emerald-400/20 bg-emerald-400/10 text-emerald-300 text-[10px]">
             {actions.length} {actions.length === 1 ? "action" : "actions"}
           </Badge>
+        </div>
+
+        {/* Progress indicator */}
+        <div className="mb-4">
+          <div className="mb-1.5 flex items-center justify-between">
+            <span className="text-[11px] text-slate-400">
+              {doneCount} of {actions.length} step{actions.length !== 1 ? "s" : ""} completed
+            </span>
+            <span className="text-[11px] font-medium text-emerald-400">
+              {actions.length > 0 ? Math.round((doneCount / actions.length) * 100) : 0}%
+            </span>
+          </div>
+          <div className="h-1 w-full overflow-hidden rounded-full bg-white/[0.06]">
+            <motion.div
+              animate={{ width: `${actions.length > 0 ? (doneCount / actions.length) * 100 : 0}%` }}
+              className="h-full rounded-full bg-emerald-400"
+              initial={false}
+              transition={{ duration: 0.35, ease: "easeOut" }}
+            />
+          </div>
         </div>
 
         <AnimatePresence initial={false}>
@@ -330,31 +405,79 @@ export function ActionPanel({ fixSteps, expanded = true }: ActionPanelProps) {
               initial={{ opacity: 0, height: 0 }}
               transition={{ duration: 0.25 }}
             >
-              {actions.map((action, index) => (
-                <motion.div
-                  key={action.label}
-                  animate={{ opacity: 1, y: 0 }}
-                  initial={{ opacity: 0, y: 6 }}
-                  transition={{ delay: index * 0.06, duration: 0.25 }}
-                >
-                  <div className="rounded-lg border border-white/6 bg-white/[0.02] p-3">
-                    <div className="mb-1.5 flex items-center gap-2">
-                      <Terminal className="h-3.5 w-3.5 text-emerald-400/70" />
-                      <p className="text-xs font-semibold text-slate-200">{action.label}</p>
-                    </div>
-                    <p className="mb-3 text-xs leading-relaxed text-slate-400">{action.description}</p>
-
-                    {action.snippet ? (
-                      <div className="relative">
-                        <CopySnippetButton text={action.snippet} />
-                        <pre className="overflow-x-auto rounded-md border border-white/6 bg-slate-950/80 p-3 pr-10 font-mono text-[11px] leading-relaxed text-slate-300">
-                          <code>{action.snippet}</code>
-                        </pre>
+              {actions.map((action, index) => {
+                const isDone = completed.has(action.label);
+                return (
+                  <motion.div
+                    key={action.label}
+                    animate={{ opacity: 1, y: 0 }}
+                    initial={{ opacity: 0, y: 6 }}
+                    transition={{ delay: index * 0.06, duration: 0.25 }}
+                  >
+                    <div
+                      className={cn(
+                        "rounded-lg border p-3 transition-colors",
+                        isDone
+                          ? "border-emerald-400/20 bg-emerald-400/[0.04]"
+                          : "border-white/6 bg-white/[0.02]"
+                      )}
+                    >
+                      {/* Title row with checkbox */}
+                      <div className="mb-1.5 flex items-center gap-2">
+                        <button
+                          aria-label={isDone ? "Mark as not done" : "Mark as done"}
+                          className="shrink-0 text-slate-500 transition-colors hover:text-emerald-400"
+                          onClick={() => toggleDone(action.label)}
+                          type="button"
+                        >
+                          {isDone ? (
+                            <CheckSquare className="h-4 w-4 text-emerald-400" />
+                          ) : (
+                            <Square className="h-4 w-4" />
+                          )}
+                        </button>
+                        <Terminal className="h-3.5 w-3.5 text-emerald-400/70" />
+                        <p
+                          className={cn(
+                            "text-xs font-semibold",
+                            isDone ? "text-emerald-300 line-through" : "text-slate-200"
+                          )}
+                        >
+                          {action.label}
+                        </p>
                       </div>
-                    ) : null}
-                  </div>
-                </motion.div>
-              ))}
+
+                      <p className={cn("mb-3 text-xs leading-relaxed", isDone ? "text-slate-500" : "text-slate-400")}>
+                        {action.description}
+                      </p>
+
+                      {/* Copy buttons row */}
+                      <div className="mb-2 flex flex-wrap gap-2">
+                        <CopyButton label="Copy Command" text={action.description} />
+                        {action.snippet ? <CopyButton label="Copy Code" text={action.snippet} /> : null}
+                      </div>
+
+                      {/* Code snippet (detailed mode shows full, simple hides snippet) */}
+                      {action.snippet && detailLevel === "detailed" ? (
+                        <div className="relative">
+                          <CopySnippetButton text={action.snippet} />
+                          <pre className="overflow-x-auto rounded-md border border-white/6 bg-slate-950/80 p-3 pr-10 font-mono text-[11px] leading-relaxed text-slate-300">
+                            <code>{action.snippet}</code>
+                          </pre>
+                        </div>
+                      ) : null}
+                    </div>
+                  </motion.div>
+                );
+              })}
+
+              {/* Safety note */}
+              <div className="flex items-start gap-2 rounded-md border border-amber-400/10 bg-amber-400/[0.03] px-3 py-2">
+                <ShieldAlert className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-400/70" />
+                <p className="text-[11px] leading-relaxed text-amber-200/70">
+                  Always test changes in a safe environment before applying to production.
+                </p>
+              </div>
             </motion.div>
           )}
         </AnimatePresence>

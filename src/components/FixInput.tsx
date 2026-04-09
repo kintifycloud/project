@@ -137,8 +137,8 @@ export function FixInput({ className, defaultValue = "", showOutput = true }: Fi
               transition={{ duration: 0.3 }}
             >
               <Loader2 className="h-8 w-8 animate-spin text-emerald-400" />
-              <p className="text-base font-medium text-white">Analyzing your system...</p>
-              <p className="text-sm text-slate-400">Detecting patterns, dependencies, and root cause...</p>
+              <p className="text-base font-medium text-white">Analyzing with Kintify AI...</p>
+              <p className="text-sm text-slate-400">Running intelligent diagnostics on your system issue...</p>
             </motion.div>
           ) : result ? (
             <motion.div

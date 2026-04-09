@@ -1,10 +1,133 @@
+import { openai } from "@/lib/llm";
+
+export type AnalysisCategory = "performance" | "cost" | "errors" | "ai" | "default";
+
 export type AnalysisResult = {
+  category: AnalysisCategory;
   problem: string;
   cause: string;
   explanation: string;
   fix: string[];
   prevention: string[];
 };
+
+export type LlmAnalysisResult = AnalysisResult & {
+  confidence: number;
+  impact: string;
+  improvement: string;
+};
+
+/* ------------------------------------------------------------------ */
+/*  LLM-powered analysis                                               */
+/* ------------------------------------------------------------------ */
+
+const MAX_INPUT_LENGTH = 500;
+const LLM_TIMEOUT_MS = 8_000;
+
+const SYSTEM_PROMPT = `You are Kintify, a cloud systems diagnostics expert.
+Analyze the user's system issue and return ONLY valid JSON with this exact structure:
+
+{
+  "category": "performance" | "cost" | "errors" | "ai" | "default",
+  "problem": "one-sentence problem statement",
+  "cause": "one-sentence root cause",
+  "explanation": "2-3 sentence technical explanation",
+  "fix": ["step 1", "step 2", "step 3"],
+  "prevention": ["tip 1", "tip 2", "tip 3"],
+  "confidence": <number 70-98>,
+  "impact": "Low" | "Medium" | "High" | "Critical",
+  "improvement": "+XX% <metric>"
+}
+
+Rules:
+- fix and prevention must each have 3-5 items
+- confidence must be a number between 70 and 98
+- improvement must be a short string like "+40% faster" or "-30% cost reduction"
+- Return ONLY JSON, no markdown, no explanation outside JSON`;
+
+function validateLlmResponse(data: unknown): LlmAnalysisResult | null {
+  if (!data || typeof data !== "object") return null;
+
+  const d = data as Record<string, unknown>;
+
+  const validCategories: AnalysisCategory[] = ["performance", "cost", "errors", "ai", "default"];
+  const category = validCategories.includes(d.category as AnalysisCategory)
+    ? (d.category as AnalysisCategory)
+    : "default";
+
+  if (typeof d.problem !== "string" || !d.problem) return null;
+  if (typeof d.cause !== "string" || !d.cause) return null;
+  if (typeof d.explanation !== "string") return null;
+  if (!Array.isArray(d.fix) || d.fix.length === 0) return null;
+  if (!Array.isArray(d.prevention) || d.prevention.length === 0) return null;
+
+  const fix = d.fix.filter((s): s is string => typeof s === "string" && s.length > 0);
+  const prevention = d.prevention.filter((s): s is string => typeof s === "string" && s.length > 0);
+
+  if (fix.length === 0 || prevention.length === 0) return null;
+
+  const confidence =
+    typeof d.confidence === "number"
+      ? Math.min(98, Math.max(70, Math.round(d.confidence)))
+      : 85;
+
+  const impact =
+    typeof d.impact === "string" && ["Low", "Medium", "High", "Critical"].includes(d.impact)
+      ? d.impact
+      : "Medium";
+
+  const improvement = typeof d.improvement === "string" && d.improvement ? d.improvement : "+25% improvement";
+
+  return {
+    category,
+    problem: d.problem as string,
+    cause: d.cause as string,
+    explanation: (d.explanation as string) || "",
+    fix,
+    prevention,
+    confidence,
+    impact,
+    improvement,
+  };
+}
+
+export async function analyzeWithLLM(input: string): Promise<LlmAnalysisResult> {
+  const trimmed = input.slice(0, MAX_INPUT_LENGTH);
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), LLM_TIMEOUT_MS);
+
+  try {
+    const res = await openai.chat.completions.create(
+      {
+        model: "gpt-4.1-mini",
+        messages: [
+          { role: "system", content: SYSTEM_PROMPT },
+          { role: "user", content: trimmed },
+        ],
+        temperature: 0.3,
+        max_tokens: 800,
+      },
+      { signal: controller.signal },
+    );
+
+    const text = res.choices[0]?.message?.content ?? "";
+
+    // Strip markdown fences if present
+    const cleaned = text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
+
+    const parsed = JSON.parse(cleaned) as unknown;
+    const validated = validateLlmResponse(parsed);
+
+    if (!validated) {
+      throw new Error("LLM response failed validation");
+    }
+
+    return validated;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
 
 type AnalysisVariant = {
   problem: string[];
@@ -213,8 +336,9 @@ function pickVariantArray(options: string[][], text: string): string[] {
   return selection ?? options[0] ?? [];
 }
 
-function buildResult(variant: AnalysisVariant, text: string): AnalysisResult {
+function buildResult(variant: AnalysisVariant, text: string, category: AnalysisCategory): AnalysisResult {
   return {
+    category,
     problem: pickVariant(variant.problem, `${text}:problem`),
     cause: pickVariant(variant.cause, `${text}:cause`),
     explanation: pickVariant(variant.explanation, `${text}:explanation`),
@@ -232,7 +356,7 @@ export function analyzeInput(input: string): AnalysisResult {
     text.includes("delay") ||
     text.includes("timeout")
   ) {
-    return buildResult(responses.performance, text);
+    return buildResult(responses.performance, text, "performance");
   }
 
   if (
@@ -241,7 +365,7 @@ export function analyzeInput(input: string): AnalysisResult {
     text.includes("expensive") ||
     text.includes("charges")
   ) {
-    return buildResult(responses.cost, text);
+    return buildResult(responses.cost, text, "cost");
   }
 
   if (
@@ -250,7 +374,7 @@ export function analyzeInput(input: string): AnalysisResult {
     text.includes("crash") ||
     text.includes("exception")
   ) {
-    return buildResult(responses.errors, text);
+    return buildResult(responses.errors, text, "errors");
   }
 
   if (
@@ -260,8 +384,8 @@ export function analyzeInput(input: string): AnalysisResult {
     text.includes("wrong") ||
     text.includes("inaccurate")
   ) {
-    return buildResult(responses.ai, text);
+    return buildResult(responses.ai, text, "ai");
   }
 
-  return buildResult(responses.default, text);
+  return buildResult(responses.default, text, "default");
 }

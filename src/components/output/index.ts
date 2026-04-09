@@ -1,8 +1,10 @@
 export { ActionPanel } from "./ActionPanel";
+export { AgentPanel } from "./AgentPanel";
 export { CauseBlock } from "./CauseBlock";
 export { ControlPanel } from "./ControlPanel";
 export { ExplanationBlock } from "./ExplanationBlock";
 export { FixStepsBlock } from "./FixStepsBlock";
 export { InsightPanel } from "./InsightPanel";
+export { PerceptionPanel } from "./PerceptionPanel";
 export { PreventionBlock } from "./PreventionBlock";
 export { ProblemBlock } from "./ProblemBlock";

@@ -7,10 +7,12 @@ import { MessageSquare, Sparkles } from "lucide-react";
 import { EmailCapture } from "@/components/EmailCapture";
 import {
   ActionPanel,
+  AgentPanel,
   CauseBlock,
   ControlPanel,
   ExplanationBlock,
   FixStepsBlock,
+  PerceptionPanel,
   PreventionBlock,
   ProblemBlock,
 } from "@/components/output";
@@ -18,6 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import type { AnalysisResult } from "@/lib/analyzer";
+import { computeConfidence, confidenceLabel } from "@/lib/perception";
 import { cn } from "@/lib/utils";
 
 type DetailLevel = "simple" | "detailed";
@@ -60,7 +63,7 @@ export function FixOutput({ result, className, onReanalyze, isReanalyzing }: Fix
             <p className="mt-1 text-xs text-slate-400">Generated in real-time from your system input</p>
           </div>
           <Badge className="w-fit border-emerald-400/20 bg-emerald-400/10 text-emerald-200">
-            Confidence: High (92%)
+            Confidence: {confidenceLabel(computeConfidence(result))} ({computeConfidence(result)}%)
           </Badge>
         </div>
 
@@ -79,6 +82,11 @@ export function FixOutput({ result, className, onReanalyze, isReanalyzing }: Fix
 
         <Separator className="my-4 bg-white/8" />
 
+        {/* Perception Engine */}
+        <PerceptionPanel expanded={expanded} result={result} />
+
+        <Separator className="my-4 bg-white/8" />
+
         {/* Section blocks */}
         <div className="space-y-4">
           <ProblemBlock data={result.problem} detailLevel={detailLevel} expanded={expanded} />
@@ -88,15 +96,20 @@ export function FixOutput({ result, className, onReanalyze, isReanalyzing }: Fix
           <Separator className="my-4 bg-white/8" />
 
           <FixStepsBlock data={result.fix} detailLevel={detailLevel} expanded={expanded} />
-          <ActionPanel expanded={expanded} fixSteps={result.fix} />
+          <ActionPanel detailLevel={detailLevel} expanded={expanded} fixSteps={result.fix} />
           <PreventionBlock data={result.prevention} detailLevel={detailLevel} expanded={expanded} />
         </div>
 
         <Separator className="my-6 bg-white/8" />
 
-        {/* Return loop */}
-        <p className="text-center text-xs text-slate-600">
-          Kintify improves fixes over time. Come back to see better solutions.
+        {/* Agent Mode */}
+        <AgentPanel />
+
+        <Separator className="my-6 bg-white/8" />
+
+        {/* Trust microcopy */}
+        <p className="text-center text-xs text-slate-500">
+          This analysis is generated from real system patterns and continuously improves.
         </p>
       </Card>
 
