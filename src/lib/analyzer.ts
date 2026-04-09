@@ -1,6 +1,6 @@
 import { openai } from "@/lib/llm";
 
-export type AnalysisCategory = "performance" | "cost" | "errors" | "ai" | "default";
+export type AnalysisCategory = "performance" | "cost" | "errors" | "ai" | "default" | "Unknown";
 
 export type AnalysisResult = {
   category: AnalysisCategory;
@@ -18,116 +18,114 @@ export type LlmAnalysisResult = AnalysisResult & {
 };
 
 /* ------------------------------------------------------------------ */
-/*  LLM-powered analysis                                               */
+/*  Mock fallback for LLM failures                                     */
 /* ------------------------------------------------------------------ */
 
-const MAX_INPUT_LENGTH = 500;
-const LLM_TIMEOUT_MS = 8_000;
-
-const SYSTEM_PROMPT = `You are Kintify, a cloud systems diagnostics expert.
-Analyze the user's system issue and return ONLY valid JSON with this exact structure:
-
-{
-  "category": "performance" | "cost" | "errors" | "ai" | "default",
-  "problem": "one-sentence problem statement",
-  "cause": "one-sentence root cause",
-  "explanation": "2-3 sentence technical explanation",
-  "fix": ["step 1", "step 2", "step 3"],
-  "prevention": ["tip 1", "tip 2", "tip 3"],
-  "confidence": <number 70-98>,
-  "impact": "Low" | "Medium" | "High" | "Critical",
-  "improvement": "+XX% <metric>"
-}
-
-Rules:
-- fix and prevention must each have 3-5 items
-- confidence must be a number between 70 and 98
-- improvement must be a short string like "+40% faster" or "-30% cost reduction"
-- Return ONLY JSON, no markdown, no explanation outside JSON`;
-
-function validateLlmResponse(data: unknown): LlmAnalysisResult | null {
-  if (!data || typeof data !== "object") return null;
-
-  const d = data as Record<string, unknown>;
-
-  const validCategories: AnalysisCategory[] = ["performance", "cost", "errors", "ai", "default"];
-  const category = validCategories.includes(d.category as AnalysisCategory)
-    ? (d.category as AnalysisCategory)
-    : "default";
-
-  if (typeof d.problem !== "string" || !d.problem) return null;
-  if (typeof d.cause !== "string" || !d.cause) return null;
-  if (typeof d.explanation !== "string") return null;
-  if (!Array.isArray(d.fix) || d.fix.length === 0) return null;
-  if (!Array.isArray(d.prevention) || d.prevention.length === 0) return null;
-
-  const fix = d.fix.filter((s): s is string => typeof s === "string" && s.length > 0);
-  const prevention = d.prevention.filter((s): s is string => typeof s === "string" && s.length > 0);
-
-  if (fix.length === 0 || prevention.length === 0) return null;
-
-  const confidence =
-    typeof d.confidence === "number"
-      ? Math.min(98, Math.max(70, Math.round(d.confidence)))
-      : 85;
-
-  const impact =
-    typeof d.impact === "string" && ["Low", "Medium", "High", "Critical"].includes(d.impact)
-      ? d.impact
-      : "Medium";
-
-  const improvement = typeof d.improvement === "string" && d.improvement ? d.improvement : "+25% improvement";
-
+function fallbackMockResponse(input: string): LlmAnalysisResult {
   return {
-    category,
-    problem: d.problem as string,
-    cause: d.cause as string,
-    explanation: (d.explanation as string) || "",
-    fix,
-    prevention,
-    confidence,
-    impact,
-    improvement,
+    category: "Unknown",
+    problem: input,
+    cause: "Analysis unavailable",
+    explanation: "Unable to analyze due to API or parsing error. Please try again.",
+    fix: ["Retry analysis", "Check logs manually"],
+    prevention: ["Add monitoring", "Improve observability"],
+    confidence: 20,
+    impact: "Medium",
+    improvement: "Enable real-time diagnostics",
   };
 }
 
-export async function analyzeWithLLM(input: string): Promise<LlmAnalysisResult> {
-  const trimmed = input.slice(0, MAX_INPUT_LENGTH);
+/* ------------------------------------------------------------------ */
+/*  Safe JSON parsing                                                  */
+/* ------------------------------------------------------------------ */
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), LLM_TIMEOUT_MS);
-
+function safeParse(text: string): unknown {
   try {
-    const res = await openai.chat.completions.create(
-      {
-        model: "gpt-4.1-mini",
-        messages: [
-          { role: "system", content: SYSTEM_PROMPT },
-          { role: "user", content: trimmed },
-        ],
-        temperature: 0.3,
-        max_tokens: 800,
-      },
-      { signal: controller.signal },
-    );
-
-    const text = res.choices[0]?.message?.content ?? "";
-
-    // Strip markdown fences if present
-    const cleaned = text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
-
-    const parsed = JSON.parse(cleaned) as unknown;
-    const validated = validateLlmResponse(parsed);
-
-    if (!validated) {
-      throw new Error("LLM response failed validation");
-    }
-
-    return validated;
-  } finally {
-    clearTimeout(timeout);
+    return JSON.parse(text);
+  } catch {
+    return null;
   }
 }
+
+/* ------------------------------------------------------------------ */
+/*  Response validation                                                */
+/* ------------------------------------------------------------------ */
+
+function isValidResponse(data: unknown): data is LlmAnalysisResult {
+  if (!data || typeof data !== "object") return false;
+  const d = data as Record<string, unknown>;
+  return (
+    Array.isArray(d.fix) &&
+    Array.isArray(d.prevention) &&
+    typeof d.confidence === "number"
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  LLM-powered analysis with OpenRouter                               */
+/* ------------------------------------------------------------------ */
+
+export async function analyzeWithLLM(input: string): Promise<LlmAnalysisResult> {
+  const cleanInput = input.slice(0, 500);
+
+  const prompt = `
+You are a cloud systems expert.
+
+STRICT RULES:
+
+- Return ONLY valid JSON
+- No markdown
+- No explanation
+
+Analyze this issue:
+"${cleanInput}"
+
+Return JSON:
+{
+  "category": "performance" | "cost" | "errors" | "ai" | "default",
+  "problem": "...",
+  "cause": "...",
+  "explanation": "...",
+  "fix": ["...", "..."],
+  "prevention": ["...", "..."],
+  "confidence": number,
+  "impact": "Low | Medium | High | Critical",
+  "improvement": "..."
+}
+`;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+
+  try {
+    const res = await openai.chat.completions.create({
+      model: "mistralai/mistral-7b-instruct:free",
+      messages: [
+        { role: "system", content: "You are a cloud systems expert. Return ONLY valid JSON." },
+        { role: "user", content: prompt },
+      ],
+      temperature: 0.3,
+      max_tokens: 800,
+    }, { signal: controller.signal });
+
+    clearTimeout(timeout);
+
+    const text = res.choices[0]?.message?.content ?? "";
+    const parsed = safeParse(text);
+
+    if (!isValidResponse(parsed)) {
+      return fallbackMockResponse(input);
+    }
+
+    return parsed;
+  } catch {
+    return fallbackMockResponse(input);
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/*  Mock analyzer (preserved for backward compatibility)              */
+/* ------------------------------------------------------------------ */
 
 type AnalysisVariant = {
   problem: string[];

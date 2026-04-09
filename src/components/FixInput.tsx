@@ -11,8 +11,9 @@ import { FixOutputAnimated } from "@/components/FixOutputAnimated";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import type { AnalysisResult } from "@/lib/analyzer";
+import type { LlmAnalysisResult } from "@/lib/analyzer";
 import { saveToHistory } from "@/lib/history";
+import { slugify } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
 type FixInputProps = {
@@ -24,7 +25,7 @@ type FixInputProps = {
 export function FixInput({ className, defaultValue = "", showOutput = true }: FixInputProps) {
   const router = useRouter();
   const [input, setInput] = useState(defaultValue);
-  const [result, setResult] = useState<AnalysisResult | null>(null);
+  const [result, setResult] = useState<LlmAnalysisResult | null>(null);
   const [slug, setSlug] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -56,17 +57,16 @@ export function FixInput({ className, defaultValue = "", showOutput = true }: Fi
         throw new Error(err?.error || "Unable to analyze. Try again.");
       }
 
-      const data = (await response.json()) as AnalysisResult & { slug: string };
+      const data = (await response.json()) as LlmAnalysisResult;
+      const generatedSlug = slugify(trimmedInput);
       setResult(data);
-      if (data.slug) {
-        setSlug(data.slug);
-        saveToHistory({
-          input: trimmedInput,
-          slug: data.slug,
-          problem: data.problem,
-          timestamp: Date.now(),
-        });
-      }
+      setSlug(generatedSlug);
+      saveToHistory({
+        input: trimmedInput,
+        slug: generatedSlug,
+        problem: data.problem,
+        timestamp: Date.now(),
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong. Try again.");
     } finally {

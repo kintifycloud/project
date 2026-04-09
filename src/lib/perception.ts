@@ -76,6 +76,10 @@ const SIGNALS: Record<AnalysisCategory, string[]> = {
     "Unclassified system signal",
     "Insufficient diagnostic data",
   ],
+  Unknown: [
+    "Unclassified system signal",
+    "Insufficient diagnostic data",
+  ],
 };
 
 export function getSignals(category: AnalysisCategory): string[] {
@@ -94,6 +98,7 @@ const IMPACT: Record<AnalysisCategory, ImpactLevel> = {
   errors: "Critical",
   ai: "Medium",
   default: "Low",
+  Unknown: "Low",
 };
 
 export function getImpact(category: AnalysisCategory): ImpactLevel {
@@ -128,6 +133,7 @@ const IMPROVEMENT: Record<AnalysisCategory, EstimatedImprovement> = {
   errors: { metric: "system stability", value: "+60% reliability" },
   ai: { metric: "output accuracy", value: "+45% consistency" },
   default: { metric: "system health", value: "+20% improvement" },
+  Unknown: { metric: "system health", value: "+20% improvement" },
 };
 
 export function getImprovement(category: AnalysisCategory): EstimatedImprovement {
@@ -144,6 +150,7 @@ const SYSTEM_TYPE: Record<AnalysisCategory, string> = {
   errors: "Application / Backend",
   ai: "AI / ML Pipeline",
   default: "Unknown",
+  Unknown: "Unknown",
 };
 
 export function getSystemType(category: AnalysisCategory): string {
