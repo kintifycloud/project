@@ -1,25 +1,21 @@
-import { openai } from "@/lib/llm";
+import { openai } from "./llm"
 
-export type AnalysisCategory = "performance" | "cost" | "errors" | "ai" | "default" | "Unknown";
+export type AnalysisCategory = "performance" | "cost" | "errors" | "ai" | "default" | "Unknown"
 
 export type AnalysisResult = {
-  category: AnalysisCategory;
-  problem: string;
-  cause: string;
-  explanation: string;
-  fix: string[];
-  prevention: string[];
-};
+  category: AnalysisCategory
+  problem: string
+  cause: string
+  explanation: string
+  fix: string[]
+  prevention: string[]
+}
 
 export type LlmAnalysisResult = AnalysisResult & {
-  confidence: number;
-  impact: string;
-  improvement: string;
-};
-
-/* ------------------------------------------------------------------ */
-/*  Mock fallback for LLM failures                                     */
-/* ------------------------------------------------------------------ */
+  confidence: number
+  impact: string
+  improvement: string
+}
 
 function fallbackMockResponse(input: string): LlmAnalysisResult {
   return {
@@ -29,47 +25,34 @@ function fallbackMockResponse(input: string): LlmAnalysisResult {
     explanation: "Unable to analyze due to API or parsing error. Please try again.",
     fix: ["Retry analysis", "Check logs manually"],
     prevention: ["Add monitoring", "Improve observability"],
-    confidence: 20,
+    confidence: 0.2,
     impact: "Medium",
-    improvement: "Enable real-time diagnostics",
-  };
-}
-
-/* ------------------------------------------------------------------ */
-/*  Safe JSON parsing                                                  */
-/* ------------------------------------------------------------------ */
-
-function safeParse(text: string): unknown {
-  try {
-    return JSON.parse(text);
-  } catch {
-    return null;
+    improvement: "Enable real-time diagnostics"
   }
 }
 
-/* ------------------------------------------------------------------ */
-/*  Response validation                                                */
-/* ------------------------------------------------------------------ */
-
-function isValidResponse(data: unknown): data is LlmAnalysisResult {
-  if (!data || typeof data !== "object") return false;
-  const d = data as Record<string, unknown>;
-  return (
-    typeof d.category === "string" &&
-    typeof d.problem === "string" &&
-    typeof d.cause === "string" &&
-    Array.isArray(d.fix) &&
-    Array.isArray(d.prevention) &&
-    typeof d.confidence === "number"
-  );
+function safeParse(text: string) {
+  try {
+    return JSON.parse(text)
+  } catch {
+    return null
+  }
 }
 
-/* ------------------------------------------------------------------ */
-/*  LLM-powered analysis with OpenRouter                               */
-/* ------------------------------------------------------------------ */
+function isValidResponse(data: any): data is LlmAnalysisResult {
+  return (
+    data &&
+    typeof data.category === "string" &&
+    typeof data.problem === "string" &&
+    typeof data.cause === "string" &&
+    Array.isArray(data.fix) &&
+    Array.isArray(data.prevention) &&
+    typeof data.confidence === "number"
+  )
+}
 
 export async function analyzeWithLLM(input: string): Promise<LlmAnalysisResult> {
-  const cleanInput = input.slice(0, 500);
+  const cleanInput = input.slice(0, 500)
 
   const prompt = `
 You are a cloud systems expert.
@@ -93,45 +76,47 @@ FORMAT:
 "improvement": "string"
 }
 
-Analyze this issue:
+Analyze:
 "${cleanInput}"
-`;
+`
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 8000);
+  async function callLLM() {
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 15000)
 
-  try {
     const res = await openai.chat.completions.create({
-      model: "openchat/openchat-7b",
+      model: "openai/gpt-4o-mini",
       messages: [
         { role: "system", content: "You are a cloud systems expert. Return ONLY valid JSON." },
         { role: "user", content: prompt },
       ],
       temperature: 0.3,
-      max_tokens: 800,
-    }, { signal: controller.signal });
+    }, { signal: controller.signal })
 
-    clearTimeout(timeout);
+    clearTimeout(timeout)
 
-    console.log("RAW RESPONSE:", JSON.stringify(res, null, 2));
+    const text = res.choices[0]?.message?.content || ""
 
-    const text = res.choices[0]?.message?.content ?? "";
-    console.log("TEXT:", text);
-
-    // Force JSON extraction with regex
-    const jsonMatch = text.match(/{[\s\S]*}/);
-    const parsed = safeParse(jsonMatch ? jsonMatch[0] : "");
+    const jsonMatch = text.match(/\{[\s\S]*\}/)
+    const parsed = safeParse(jsonMatch ? jsonMatch[0] : "")
 
     if (!isValidResponse(parsed)) {
-      console.error("VALIDATION FAILED:", parsed);
-      return fallbackMockResponse(input);
+      throw new Error("Invalid response format")
     }
 
-    console.log("SUCCESS RESPONSE:", parsed);
-    return parsed;
+    return parsed
+  }
+
+  try {
+    return await callLLM()
   } catch (err) {
-    console.error("LLM ERROR:", err);
-    return fallbackMockResponse(input);
+    console.error("LLM ERROR:", err)
+
+    try {
+      return await callLLM() // retry once
+    } catch {
+      return fallbackMockResponse(input)
+    }
   }
 }
 

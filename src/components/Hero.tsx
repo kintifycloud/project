@@ -38,6 +38,7 @@ export function Hero({ children }: { children?: ReactNode }) {
             </div>
           </Link>
           <nav className="hidden items-center gap-6 text-sm text-slate-300 md:flex">
+            <Link href="/fix">Fix</Link>
             <Link href="#how-it-works">How it works</Link>
             <Link href="#proofs">Proofs</Link>
             <Link href="#features">Features</Link>
