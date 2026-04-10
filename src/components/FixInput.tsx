@@ -85,8 +85,13 @@ function parseApiResponse(raw: unknown): AnalysisResult {
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export function FixInput() {
-  const [input, setInput] = useState("");
+type FixInputProps = {
+  defaultValue?: string;
+  showOutput?: boolean;
+};
+
+export function FixInput({ defaultValue = "", showOutput = true }: FixInputProps) {
+  const [input, setInput] = useState(defaultValue);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [output, setOutput] = useState<AnalysisResult | null>(null);
@@ -201,55 +206,57 @@ export function FixInput() {
       </div>
 
       {/* ── Output area — ALWAYS rendered when state is set ────────────── */}
-      <div ref={outputRef}>
-        <AnimatePresence mode="wait">
-          {/* Loading skeleton */}
-          {loading && (
-            <motion.div
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              initial={{ opacity: 0 }}
-              key="loading"
-              transition={{ duration: 0.2 }}
-            >
-              <LoadingState />
-            </motion.div>
-          )}
+      {showOutput && (
+        <div ref={outputRef}>
+          <AnimatePresence mode="wait">
+            {/* Loading skeleton */}
+            {loading && (
+              <motion.div
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                initial={{ opacity: 0 }}
+                key="loading"
+                transition={{ duration: 0.2 }}
+              >
+                <LoadingState />
+              </motion.div>
+            )}
 
-          {/* Error state */}
-          {!loading && error && (
-            <motion.div
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              initial={{ opacity: 0 }}
-              key="error"
-              transition={{ duration: 0.2 }}
-            >
-              <ErrorState
-                message={error}
-                onRetry={() => void handleFix()}
-              />
-            </motion.div>
-          )}
+            {/* Error state */}
+            {!loading && error && (
+              <motion.div
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                initial={{ opacity: 0 }}
+                key="error"
+                transition={{ duration: 0.2 }}
+              >
+                <ErrorState
+                  message={error}
+                  onRetry={() => void handleFix()}
+                />
+              </motion.div>
+            )}
 
-          {/* Output — fades in after API responds */}
-          {!loading && !error && output && (
-            <motion.div
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              initial={{ opacity: 0 }}
-              key="output"
-              transition={{ duration: 0.3 }}
-            >
-              <FixOutput
-                isReanalyzing={loading}
-                onReanalyze={handleReanalyze}
-                result={output}
-              />
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
+            {/* Output — fades in after API responds */}
+            {!loading && !error && output && (
+              <motion.div
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                initial={{ opacity: 0 }}
+                key="output"
+                transition={{ duration: 0.3 }}
+              >
+                <FixOutput
+                  isReanalyzing={loading}
+                  onReanalyze={handleReanalyze}
+                  result={output}
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      )}
     </div>
   );
 }
