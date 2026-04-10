@@ -39,6 +39,18 @@ export default function TracePage() {
               <Link className="hover:text-white" href="/verify">
                 Verify
               </Link>
+              <Link className="hover:text-white" href="/flow">
+                Flow
+              </Link>
+              <Link className="hover:text-white" href="/live">
+                Live
+              </Link>
+              <Link className="hover:text-white" href="/trust">
+                Trust
+              </Link>
+              <Link className="hover:text-white" href="/guarantee">
+                Guarantee
+              </Link>
             </nav>
             <span className="rounded-full border border-indigo-500/30 bg-indigo-500/10 px-2.5 py-0.5 font-mono text-[11px] text-indigo-400">
               Intelligence Active

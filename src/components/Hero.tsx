@@ -42,6 +42,10 @@ export function Hero({ children }: { children?: ReactNode }) {
             <Link href="/trace">Trace</Link>
             <Link href="/why">Why</Link>
             <Link href="/verify">Verify</Link>
+            <Link href="/flow">Flow</Link>
+            <Link href="/live">Live</Link>
+            <Link href="/trust">Trust</Link>
+            <Link href="/guarantee">Guarantee</Link>
             <Link href="#how-it-works">How it works</Link>
             <Link href="#proofs">Proofs</Link>
             <Link href="#features">Features</Link>

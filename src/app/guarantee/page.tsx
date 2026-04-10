@@ -2,17 +2,17 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
-import { VerifyInput } from "@/components/VerifyInput";
+import { GuaranteeInput } from "@/components/GuaranteeInput";
 
 export const metadata: Metadata = {
-  title: "Verify System Fixes | Kintify",
-  description: "Prove your system is actually fixed with verified outcomes, not assumptions.",
+  title: "System Confidence + Outcome Guarantee | Kintify",
+  description: "Guarantee your system behavior. Not just fixes. Assured outcomes.",
   alternates: {
-    canonical: "/verify",
+    canonical: "/guarantee",
   },
 };
 
-export default function VerifyPage() {
+export default function GuaranteePage() {
   return (
     <main className="min-h-screen bg-zinc-950">
       <header className="sticky top-0 z-20 border-b border-zinc-800/60 bg-zinc-950/90 backdrop-blur-md">
@@ -36,7 +36,7 @@ export default function VerifyPage() {
               <Link className="hover:text-white" href="/why">
                 Why
               </Link>
-              <Link className="text-white" href="/verify">
+              <Link className="hover:text-white" href="/verify">
                 Verify
               </Link>
               <Link className="hover:text-white" href="/flow">
@@ -48,7 +48,7 @@ export default function VerifyPage() {
               <Link className="hover:text-white" href="/trust">
                 Trust
               </Link>
-              <Link className="hover:text-white" href="/guarantee">
+              <Link className="text-white" href="/guarantee">
                 Guarantee
               </Link>
             </nav>
@@ -61,24 +61,24 @@ export default function VerifyPage() {
 
       <section className="px-4 pb-2 pt-14 text-center sm:px-6 sm:pt-16 md:pt-20">
         <h1 className="mx-auto max-w-2xl text-2xl font-semibold leading-tight tracking-tight text-white sm:text-3xl md:text-4xl lg:text-[2.6rem]">
-          Prove your system is actually fixed.
+          Guarantee your system behavior.
         </h1>
 
         <p className="mx-auto mt-3 max-w-md text-sm leading-relaxed text-zinc-400 sm:text-base">
-          Not assumptions. Verified outcomes.
+          Not just fixes. Assured outcomes.
         </p>
       </section>
 
       <section className="px-4 py-8 sm:px-6 sm:py-10">
         <div className="mx-auto w-full max-w-3xl">
           <ErrorBoundary>
-            <VerifyInput />
+            <GuaranteeInput />
           </ErrorBoundary>
         </div>
       </section>
 
       <footer className="border-t border-zinc-800/60 px-4 py-6 text-center">
-        <p className="font-mono text-xs text-zinc-600">Built for verified truth</p>
+        <p className="font-mono text-xs text-zinc-600">Built for system confidence</p>
       </footer>
     </main>
   );
