@@ -27,16 +27,16 @@ export default function WhyPage() {
 
           <div className="flex items-center gap-4">
             <nav className="flex items-center gap-3 text-sm text-zinc-400">
-              <Link className="hover:text-white" href={"/fix" as any}>
+              <Link className="hover:text-white" href="/fix">
                 Fix
               </Link>
-              <Link className="hover:text-white" href={"/trace" as any}>
+              <Link className="hover:text-white" href="/trace">
                 Trace
               </Link>
-              <Link className="text-white" href={"/why" as any}>
+              <Link className="text-white" href="/why">
                 Why
               </Link>
-              <Link className="hover:text-white" href={"/verify" as any}>
+              <Link className="hover:text-white" href="/verify">
                 Verify
               </Link>
             </nav>
