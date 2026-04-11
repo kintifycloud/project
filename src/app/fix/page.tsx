@@ -1,19 +1,44 @@
-import type { Metadata } from "next";
+﻿"use client";
+
+import { useMemo, useRef, useState } from "react";
 import Script from "next/script";
 
-import { ErrorBoundary } from "@/components/ErrorBoundary";
-import { FixInput } from "@/components/FixInput";
-import { FixNavbar } from "@/components/FixNavbar";
+import { FixLoader } from "@/components/FixLoader";
 
-export const metadata: Metadata = {
-  title: "Fix Cloud Problems Instantly | Kintify",
-  description: "Paste your cloud issue and instantly see what's wrong and how to fix it.",
-  alternates: {
-    canonical: "/fix",
-  },
+type FixApiSuccess = {
+  success: true;
+  rootCause: string;
+  fixPlan: string[];
+  expectedOutcome: string;
+  confidence: number;
 };
 
+type FixApiError = {
+  success: false;
+  error: string;
+};
+
+type FixApiResponse = FixApiSuccess | FixApiError;
+
 export default function FixPage() {
+  const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<FixApiSuccess | null>(null);
+  const [error, setError] = useState("");
+
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  const samplePrompts = useMemo(
+    () => [
+      "Kubernetes pod crash loop",
+      "API latency spike",
+      "SSL certificate issue",
+      "Docker container failing",
+      "Database timeout",
+    ],
+    [],
+  );
+
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "WebApplication",
@@ -47,48 +72,161 @@ export default function FixPage() {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
-      <main className="min-h-screen bg-zinc-950">
-        <FixNavbar />
+      <main className="min-h-screen bg-zinc-950 text-zinc-100">
+        <header className="border-b border-zinc-900/70">
+          <div className="mx-auto flex w-full max-w-[900px] items-center justify-between px-4 py-4 sm:px-6">
+            <div className="text-sm font-semibold tracking-tight text-white">
+              Kintify
+            </div>
+            <a
+              href="/docs"
+              className="text-sm text-zinc-300 transition-colors hover:text-white"
+            >
+              Docs
+            </a>
+          </div>
+        </header>
 
-        {/* Hero Section */}
-        <section className="px-4 pb-4 pt-16 text-center sm:px-6 sm:pb-6 sm:pt-20 md:px-8 md:pb-8 md:pt-24 lg:pt-28">
-          <div className="mx-auto w-full max-w-4xl">
-            {/* Eyebrow badge */}
-            <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-zinc-700/60 bg-zinc-900/80 px-3 py-1.5 sm:px-4">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-              <span className="font-mono text-[11px] text-zinc-400 sm:text-xs">
-                Root cause · Exact fix · Verified outcome
-              </span>
+        <div className="mx-auto w-full max-w-[900px] px-4 py-10 sm:px-6 sm:py-14">
+          <h1 className="text-balance text-3xl font-semibold tracking-tight text-white sm:text-4xl">
+            Fix production issues in minutes not hours.
+          </h1>
+          <p className="mt-3 max-w-2xl text-sm leading-relaxed text-zinc-400 sm:text-base">
+            Paste logs, cloud errors, or configs. Get root cause, exact fix, and
+            expected outcome.
+          </p>
+
+          <div className="mt-8">
+            <textarea
+              ref={textareaRef}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder="Paste logs, cloud errors, or describe your issue…"
+              className="w-full min-h-[140px] resize-none rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-zinc-700 focus:ring-2 focus:ring-indigo-500/20"
+            />
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              {samplePrompts.map((prompt) => (
+                <button
+                  key={prompt}
+                  type="button"
+                  onClick={() => {
+                    setInput(prompt);
+                    setError("");
+                    textareaRef.current?.focus();
+                  }}
+                  className="rounded-full border border-zinc-800 bg-zinc-950 px-3 py-1.5 text-xs text-zinc-300 transition-colors hover:border-zinc-700 hover:text-white"
+                >
+                  {prompt}
+                </button>
+              ))}
             </div>
 
-            <h1 className="mx-auto text-2xl font-semibold leading-tight tracking-tight text-white sm:text-3xl md:text-4xl lg:text-5xl xl:text-[2.6rem]">
-              Fix production issues in{" "}
-              <span className="text-indigo-400">minutes</span>{" "}
-              <span className="text-zinc-500">not hours.</span>
-            </h1>
+            <div className="mt-6">
+              <button
+                type="button"
+                disabled={loading || input.trim().length === 0}
+                onClick={async () => {
+                  if (loading || input.trim().length === 0) return;
+                  setError("");
+                  setResult(null);
+                  setLoading(true);
 
-            <p className="mx-auto mt-4 max-w-2xl text-sm leading-relaxed text-zinc-400 sm:text-base md:text-lg">
-              Paste logs, errors, or configs. Get root cause, exact fix and
-              verified outcome.
-            </p>
+                  try {
+                    const res = await fetch("/api/fix", {
+                      method: "POST",
+                      headers: {
+                        "Content-Type": "application/json",
+                      },
+                      body: JSON.stringify({
+                        input,
+                      }),
+                    });
+
+                    const data = (await res.json().catch(() => null)) as FixApiResponse | null;
+
+                    if (!res.ok || !data) {
+                      setError("Failed to analyze issue. Please try again.");
+                      return;
+                    }
+
+                    if (data.success === false) {
+                      setError(data.error);
+                      return;
+                    }
+
+                    setResult(data);
+                  } catch {
+                    setError("Failed to analyze issue. Please try again.");
+                  } finally {
+                    setLoading(false);
+                  }
+                }}
+                className="w-full rounded-xl bg-indigo-500 px-5 py-3 text-sm font-medium text-white shadow-sm transition-opacity hover:bg-indigo-400 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+              >
+                Fix Issue
+              </button>
+
+              {error.length > 0 ? (
+                <div className="mt-3 text-sm text-red-400">{error}</div>
+              ) : null}
+
+              {loading ? (
+                <div className="mt-6">
+                  <FixLoader />
+                </div>
+              ) : null}
+
+              <div className="mt-6 rounded-xl border border-dashed border-zinc-800 bg-zinc-950/40 px-4 py-10">
+                {result === null ? (
+                  <div className="text-center text-sm text-zinc-500">
+                    Your fix result will appear here
+                  </div>
+                ) : (
+                  <div className="space-y-5 text-sm text-zinc-200">
+                    <div className="grid gap-2">
+                      <div className="text-xs font-medium tracking-wide text-zinc-400">
+                        Root Cause
+                      </div>
+                      <div className="leading-relaxed text-zinc-100">
+                        {result.rootCause}
+                      </div>
+                    </div>
+
+                    <div className="grid gap-2">
+                      <div className="text-xs font-medium tracking-wide text-zinc-400">
+                        Fix Plan
+                      </div>
+                      <ol className="list-decimal space-y-1 pl-5 text-zinc-100">
+                        {result.fixPlan.map((step, idx) => (
+                          <li key={`${idx}-${step}`} className="leading-relaxed">
+                            {step}
+                          </li>
+                        ))}
+                      </ol>
+                    </div>
+
+                    <div className="grid gap-2">
+                      <div className="text-xs font-medium tracking-wide text-zinc-400">
+                        Expected Outcome
+                      </div>
+                      <div className="leading-relaxed text-zinc-100">
+                        {result.expectedOutcome}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 text-xs text-zinc-400">
+                      <span>Confidence</span>
+                      <span className="rounded-md border border-zinc-800 bg-zinc-900 px-2 py-1 text-zinc-200">
+                        {result.confidence}%
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
-        </section>
-
-        {/* Input Section */}
-        <section className="px-4 py-6 sm:px-6 sm:py-8 md:px-8 md:py-10 lg:py-12">
-          <div className="mx-auto w-full max-w-4xl">
-            <ErrorBoundary>
-              <FixInput />
-            </ErrorBoundary>
-          </div>
-        </section>
-
-        {/* Footer */}
-        <footer className="border-t border-zinc-800/60 px-4 py-6 text-center sm:px-6 md:px-8 lg:py-8">
-          <p className="font-mono text-xs text-zinc-600 sm:text-sm">
-            Built for developers fixing real systems
-          </p>
-        </footer>
+        </div>
       </main>
     </>
   );

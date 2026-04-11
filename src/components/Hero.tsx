@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import type { Route } from "next";
 import type { ReactNode } from "react";
 import { motion } from "framer-motion";
 import { ArrowRight, CloudCog, ShieldCheck, Sparkles, Zap } from "lucide-react";
@@ -39,13 +40,13 @@ export function Hero({ children }: { children?: ReactNode }) {
           </Link>
           <nav className="hidden items-center gap-6 text-sm text-slate-300 md:flex">
             <Link href="/fix">Fix</Link>
-            <Link href="/trace">Trace</Link>
-            <Link href="/why">Why</Link>
-            <Link href="/verify">Verify</Link>
-            <Link href="/flow">Flow</Link>
-            <Link href="/live">Live</Link>
-            <Link href="/trust">Trust</Link>
-            <Link href="/guarantee">Guarantee</Link>
+            <Link href={"/trace" as Route}>Trace</Link>
+            <Link href={"/why" as Route}>Why</Link>
+            <Link href={"/verify" as Route}>Verify</Link>
+            <Link href={"/flow" as Route}>Flow</Link>
+            <Link href={"/live" as Route}>Live</Link>
+            <Link href={"/trust" as Route}>Trust</Link>
+            <Link href={"/guarantee" as Route}>Guarantee</Link>
             <Link href="#how-it-works">How it works</Link>
             <Link href="#proofs">Proofs</Link>
             <Link href="#features">Features</Link>

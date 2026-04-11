@@ -49,16 +49,6 @@ const Navbar = () => {
 
           {/* Desktop Nav */}
           <div className="hidden lg:flex items-center gap-1">
-            <NavLink href="/fix">Fix</NavLink>
-            <NavLink href="/trace">Trace</NavLink>
-            <NavLink href="/verify">Verify</NavLink>
-            <NavLink href="/live">Live</NavLink>
-            <NavLink href="/flow">Flow</NavLink>
-            <NavLink href="/guarantee">Guarantee</NavLink>
-          </div>
-
-          {/* Desktop Right */}
-          <div className="hidden lg:flex items-center gap-4">
             <NavigationMenu.Root className="relative">
               <NavigationMenu.List className="flex items-center gap-1">
                 <NavigationMenu.Item>
@@ -67,14 +57,23 @@ const Navbar = () => {
                     <ChevronDown className="ml-1 h-4 w-4 transition-transform duration-200 group-data-[state=open]:rotate-180" />
                   </NavigationMenu.Trigger>
                   <NavigationMenu.Content className="absolute top-full left-0 mt-2 w-48 rounded-xl bg-[#111117] border border-white/10 p-2 shadow-xl z-50">
+                    <NavDropdownItem icon={<Zap className="w-4 h-4" />} label="Fix" href="/fix" />
+                    <NavDropdownItem icon={<Search className="w-4 h-4" />} label="Trace" href="/trace" />
+                    <NavDropdownItem icon={<Activity className="w-4 h-4" />} label="Live" href="/live" />
+                    <div className="border-t border-white/10 my-2" />
                     <NavDropdownItem icon={<Book className="w-4 h-4" />} label="Docs" href="#" />
                     <NavDropdownItem icon={<Terminal className="w-4 h-4" />} label="API" href="#" />
                     <NavDropdownItem icon={<FileCode className="w-4 h-4" />} label="Schema / Proofs" href="#" />
                   </NavigationMenu.Content>
                 </NavigationMenu.Item>
               </NavigationMenu.List>
+              <NavigationMenu.Viewport className="absolute top-full left-0 w-full h-0" />
             </NavigationMenu.Root>
             <NavLink href="/pricing">Pricing</NavLink>
+          </div>
+
+          {/* Desktop Right */}
+          <div className="hidden lg:flex items-center gap-4">
             <a href="#" className="text-gray-300 hover:text-white transition-colors text-sm flex items-center gap-1">
               <Github className="w-4 h-4" />
               GitHub
@@ -108,18 +107,20 @@ const Navbar = () => {
             className="lg:hidden bg-[#0a0a0f] border-t border-white/10 overflow-hidden"
           >
             <div className="px-4 py-4 space-y-2">
-              <MobileNavLink href="/fix">Fix</MobileNavLink>
-              <MobileNavLink href="/trace">Trace</MobileNavLink>
-              <MobileNavLink href="/verify">Verify</MobileNavLink>
-              <MobileNavLink href="/live">Live</MobileNavLink>
-              <MobileNavLink href="/flow">Flow</MobileNavLink>
-              <MobileNavLink href="/guarantee">Guarantee</MobileNavLink>
-              <div className="border-t border-white/10 pt-4 mt-4">
+              <div className="border-b border-white/10 pb-4 mb-4">
+                <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">Developers</p>
+                <MobileNavLink href="/fix">Fix</MobileNavLink>
+                <MobileNavLink href="/trace">Trace</MobileNavLink>
+                <MobileNavLink href="/live">Live</MobileNavLink>
+              </div>
+              <div className="border-b border-white/10 pb-4 mb-4">
+                <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">Resources</p>
                 <MobileNavLink href="#">Docs</MobileNavLink>
                 <MobileNavLink href="#">API</MobileNavLink>
                 <MobileNavLink href="#">Schema / Proofs</MobileNavLink>
               </div>
               <div className="border-t border-white/10 pt-4 mt-4">
+                <MobileNavLink href="/pricing">Pricing</MobileNavLink>
                 <a href="#" className="block py-2 text-gray-300">Sign in</a>
                 <a href="/fix" className="block bg-indigo-500 text-white px-4 py-2 rounded-lg text-center font-medium mt-2">
                   Start Fixing

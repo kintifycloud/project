@@ -3,6 +3,7 @@
 import React from "react";
 import { motion } from "framer-motion";
 import Link from "next/link";
+import type { Route } from "next";
 import {
   Shield,
   CheckCircle2,
@@ -175,7 +176,7 @@ export default function AboutPage() {
                     <ArrowRight className="w-5 h-5" />
                   </Link>
                   <Link
-                    href="/flow"
+                    href={"/flow" as Route}
                     className="inline-flex items-center gap-2 bg-white/5 hover:bg-white/10 border border-white/10 text-white px-6 sm:px-8 py-3 sm:py-4 rounded-xl font-medium transition-all duration-200 text-center"
                   >
                     See How It Works

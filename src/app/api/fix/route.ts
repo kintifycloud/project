@@ -1,49 +1,112 @@
-import { analyzeWithLLM, analyzeInput } from "@/lib/analyzer";
-import { NextResponse } from "next/server";
-
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const input = body.input || "";
+    const input = body.input?.trim();
 
-    if (!input || input.trim().length === 0) {
-      console.error("API: Empty input received");
-      return NextResponse.json({
-        error: "Input is required.",
-      }, { status: 400 });
+    if (!input) {
+      return Response.json({
+        success: false,
+        error: "Input is required",
+      });
     }
 
-    console.log("API: Starting analysis for input:", input.slice(0, 100));
-
-    // Try LLM analysis first
-    let result;
-    try {
-      console.log("API: Attempting LLM analysis with OpenRouter");
-      result = await analyzeWithLLM(input);
-      console.log("API: LLM analysis successful, category:", result.category);
-    } catch (llmError) {
-      console.error("API: LLM analysis failed, falling back to mock analyzer:", llmError);
-      // Fallback to mock analyzer
-      result = analyzeInput(input);
-      console.log("API: Mock analysis used, category:", result.category);
+    if (!process.env.GEMINI_API_KEY) {
+      return Response.json({
+        success: false,
+        error: "Server is not configured",
+      });
     }
 
-    // Return only AnalysisResult fields (strip LlmAnalysisResult extras)
-    const analysisResult = {
-      category: result.category,
-      problem: result.problem,
-      cause: result.cause,
-      explanation: result.explanation,
-      fix: result.fix,
-      prevention: result.prevention,
-    };
+    const prompt = `
+You are a senior Site Reliability Engineer.
 
-    console.log("API: Returning analysis result");
-    return NextResponse.json(analysisResult);
-  } catch (error) {
-    console.error("API: Fix API error:", error);
-    return NextResponse.json({
-      error: "Could not analyze issue. Please try again.",
-    }, { status: 500 });
+Analyze the following issue:
+
+${input}
+
+Return EXACTLY in this format:
+
+Root Cause:
+<clear cause>
+
+Fix Plan:
+- step 1
+- step 2
+- step 3
+
+Expected Outcome:
+<result>
+
+Confidence:
+<number between 70–95>
+
+Rules:
+- concise
+- actionable
+- no fluff
+- no empty sections
+`;
+
+    const res = await fetch(
+      "https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=" +
+        process.env.GEMINI_API_KEY,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [{ text: prompt }],
+            },
+          ],
+        }),
+      },
+    );
+
+    const data = await res.json().catch(() => null);
+    const text: string =
+      data?.candidates?.[0]?.content?.parts?.[0]?.text ?
+        String(data.candidates[0].content.parts[0].text)
+      :
+        "";
+
+    if (!res.ok || !text) {
+      return Response.json({
+        success: false,
+        error: "Failed to analyze issue. Please try again.",
+      });
+    }
+
+    const rootCause = text.split("Root Cause:")[1]?.split("Fix Plan:")[0]?.trim();
+
+    const fixPlanRaw = text.split("Fix Plan:")[1]?.split("Expected Outcome:")[0];
+    const fixPlan = fixPlanRaw
+      ?.split("\n")
+      .map((line: string) => line.replace(/^[-*\u2022\s]+/, "").trim())
+      .filter(Boolean);
+
+    const expectedOutcome = text
+      .split("Expected Outcome:")[1]
+      ?.split("Confidence:")[0]
+      ?.trim();
+
+    const confidenceRaw = text.split("Confidence:")[1]?.trim();
+    let confidence = Number.parseInt(confidenceRaw ?? "", 10);
+    if (!Number.isFinite(confidence)) confidence = 0;
+
+    return Response.json({
+      success: true,
+      rootCause: rootCause ?? "",
+      fixPlan: fixPlan ?? [],
+      expectedOutcome: expectedOutcome ?? "",
+      confidence,
+    });
+  } catch {
+    return Response.json({
+      success: false,
+      error: "Failed to analyze issue. Please try again.",
+    });
   }
 }
