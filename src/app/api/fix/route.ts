@@ -94,69 +94,81 @@ Rules:
         throw new Error("Gemini not configured");
       }
 
-      const modelIds = ["gemini-1.5-flash", "gemini-1.5-flash-latest"];
+      const modelIds = [
+        "gemini-2.0-flash",
+        "gemini-2.0-flash-lite",
+        "gemini-1.5-flash",
+        "gemini-1.5-flash-002",
+        "gemini-1.5-flash-001",
+      ];
+
+      const apiVersions = ["v1beta", "v1"];
 
       let lastError: FixApiError | null = null;
 
       for (const modelId of modelIds) {
-        const res = await fetch(
-          "https://generativelanguage.googleapis.com/v1beta/models/" +
-            modelId +
-            ":generateContent?key=" +
-            process.env.GEMINI_API_KEY,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
+        for (const apiVersion of apiVersions) {
+          const res = await fetch(
+            "https://generativelanguage.googleapis.com/" +
+              apiVersion +
+              "/models/" +
+              modelId +
+              ":generateContent?key=" +
+              process.env.GEMINI_API_KEY,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                contents: [
+                  {
+                    parts: [{ text: prompt }],
+                  },
+                ],
+              }),
             },
-            body: JSON.stringify({
-              contents: [
-                {
-                  parts: [{ text: prompt }],
-                },
-              ],
-            }),
-          },
-        );
+          );
 
-        const raw = await res.text();
-        const data = (() => {
-          try {
-            return JSON.parse(raw);
-          } catch {
-            return null;
+          const raw = await res.text();
+          const data = (() => {
+            try {
+              return JSON.parse(raw);
+            } catch {
+              return null;
+            }
+          })();
+
+          const text: string =
+            data?.candidates?.[0]?.content?.parts?.[0]?.text ?
+              String(data.candidates[0].content.parts[0].text)
+            :
+              "";
+
+          if (!res.ok || !text) {
+            const upstreamMessage =
+              typeof data?.error?.message === "string" ? data.error.message : undefined;
+
+            lastError = {
+              success: false,
+              provider: "gemini",
+              error:
+                upstreamMessage ?
+                  `Gemini error: ${upstreamMessage}`
+                :
+                  "Failed to analyze issue. Please try again.",
+              upstreamStatus: res.status,
+            };
+            continue;
           }
-        })();
 
-        const text: string =
-          data?.candidates?.[0]?.content?.parts?.[0]?.text ?
-            String(data.candidates[0].content.parts[0].text)
-          :
-            "";
-
-        if (!res.ok || !text) {
-          const upstreamMessage =
-            typeof data?.error?.message === "string" ? data.error.message : undefined;
-
-          lastError = {
-            success: false,
+          const parsed = parseGeminiStructured(text);
+          return {
+            success: true,
             provider: "gemini",
-            error:
-              upstreamMessage ?
-                `Gemini error: ${upstreamMessage}`
-              :
-                "Failed to analyze issue. Please try again.",
-            upstreamStatus: res.status,
+            ...parsed,
           };
-          continue;
         }
-
-        const parsed = parseGeminiStructured(text);
-        return {
-          success: true,
-          provider: "gemini",
-          ...parsed,
-        };
       }
 
       return Promise.reject(
