@@ -8,7 +8,7 @@ import { ErrorState } from "@/components/ErrorState";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import type { GuaranteeResult } from "@/lib/guarantee";
-import { calculateGuaranteeLevel, calculateRegressionRisk, isGuaranteeResult } from "@/lib/guarantee";
+import { isGuaranteeResult } from "@/lib/guarantee";
 
 import { GuaranteeOutput } from "./GuaranteeOutput";
 

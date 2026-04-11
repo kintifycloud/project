@@ -7,7 +7,7 @@ import { Loader2, Play } from "lucide-react";
 import { ErrorState } from "@/components/ErrorState";
 import { Button } from "@/components/ui/button";
 import type { TrustResult } from "@/lib/trust";
-import { calculateTrustScore, getTrustStatus, isTrustResult } from "@/lib/trust";
+import { isTrustResult } from "@/lib/trust";
 
 import { TrustOutput } from "./TrustOutput";
 
