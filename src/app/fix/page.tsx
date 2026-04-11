@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import Script from "next/script";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { FixInput } from "@/components/FixInput";
@@ -13,8 +14,40 @@ export const metadata: Metadata = {
 };
 
 export default function FixPage() {
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "WebApplication",
+    name: "Kintify Fix",
+    url: "https://kintify.cloud/fix",
+    applicationCategory: "DeveloperApplication",
+    operatingSystem: "Web",
+    description:
+      "Analyze cloud, API and infrastructure issues instantly. Get root cause, fix plan and trust validation.",
+    featureList: [
+      "AI root cause analysis",
+      "Infrastructure issue diagnosis",
+      "Fix recommendations",
+      "Trust validation",
+    ],
+    offers: {
+      "@type": "Offer",
+      price: "0",
+      priceCurrency: "USD",
+    },
+    provider: {
+      "@type": "Organization",
+      name: "Kintify",
+    },
+  };
+
   return (
-    <main className="min-h-screen bg-zinc-950">
+    <>
+      <Script
+        id="json-ld-fix"
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+      <main className="min-h-screen bg-zinc-950">
       {/* ── Sticky nav bar ─────────────────────────────────────────── */}
       <header className="sticky top-0 z-20 border-b border-zinc-800/60 bg-zinc-950/90 backdrop-blur-md">
         <div className="mx-auto flex h-12 w-full max-w-5xl items-center justify-between px-4 sm:px-6">
@@ -99,6 +132,7 @@ export default function FixPage() {
           Built for developers fixing real systems
         </p>
       </footer>
-    </main>
+      </main>
+    </>
   );
 }

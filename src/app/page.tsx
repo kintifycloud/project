@@ -4,6 +4,7 @@
 
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import Script from "next/script";
 import {
   ChevronDown,
   Search,
@@ -61,11 +62,11 @@ const Navbar = () => {
             <NavigationMenu.Root className="relative">
               <NavigationMenu.List className="flex items-center gap-1">
                 <NavigationMenu.Item>
-                  <NavigationMenu.Trigger className="group inline-flex h-10 items-center justify-center rounded-md px-4 py-2 text-sm font-medium text-gray-300 hover:text-white transition-colors">
+                  <NavigationMenu.Trigger className="group inline-flex h-10 items-center justify-center rounded-md px-4 py-2 text-sm font-medium text-gray-300 hover:text-white transition-colors focus:outline-none">
                     Developers
-                    <ChevronDown className="ml-1 h-4 w-4 transition-transform group-data-[state=open]:rotate-180" />
+                    <ChevronDown className="ml-1 h-4 w-4 transition-transform duration-200 group-data-[state=open]:rotate-180" />
                   </NavigationMenu.Trigger>
-                  <NavigationMenu.Content className="absolute top-full left-0 mt-2 w-48 rounded-xl bg-[#111117] border border-white/10 p-2 shadow-xl">
+                  <NavigationMenu.Content className="absolute top-full left-0 mt-2 w-48 rounded-xl bg-[#111117] border border-white/10 p-2 shadow-xl z-50">
                     <NavDropdownItem icon={<Book className="w-4 h-4" />} label="Docs" href="#" />
                     <NavDropdownItem icon={<Terminal className="w-4 h-4" />} label="API" href="#" />
                     <NavDropdownItem icon={<FileCode className="w-4 h-4" />} label="Schema / Proofs" href="#" />
@@ -188,7 +189,7 @@ const HeroSection = () => {
   return (
     <section className="pt-28 sm:pt-32 pb-16 sm:pb-20 px-4 sm:px-6 lg:px-8">
       <div className="max-w-7xl mx-auto">
-        <div className="grid lg:grid-cols-2 gap-12 items-center">
+        <div className="grid lg:grid-cols-2 gap-8 lg:gap-12 items-center">
           {/* Left Content */}
           <div>
             <motion.div
@@ -220,12 +221,12 @@ const HeroSection = () => {
                     onFocus={() => setIsFocused(true)}
                     onBlur={() => setIsFocused(false)}
                     placeholder="Paste logs, errors, or describe your issue..."
-                    className="w-full h-32 bg-[#111117] rounded-2xl p-4 text-white placeholder-gray-500 resize-none focus:outline-none"
+                    className="w-full h-28 sm:h-32 bg-[#111117] rounded-2xl p-4 text-sm sm:text-base text-white placeholder-gray-500 resize-none focus:outline-none"
                   />
                   <div className="absolute bottom-3 right-3 flex items-center gap-2">
                     <button
                       onClick={handleFixIssue}
-                      className="bg-indigo-500 hover:bg-indigo-600 text-white px-5 py-2 rounded-xl font-medium transition-colors flex items-center gap-2"
+                      className="bg-indigo-500 hover:bg-indigo-600 text-white px-4 sm:px-5 py-2 rounded-xl font-medium transition-colors flex items-center gap-2 text-sm sm:text-base"
                     >
                       Fix Issue
                       <ArrowRight className="w-4 h-4" />
@@ -268,25 +269,25 @@ const HeroSection = () => {
             initial={{ opacity: 0, x: 50 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.6, delay: 0.2 }}
-            className="relative"
+            className="relative order-first lg:order-last"
           >
             {/* Verisig Badge */}
-            <div className="absolute -top-4 -right-4 z-10">
-              <div className="bg-[#111117] border border-green-500/30 rounded-xl px-4 py-2 flex items-center gap-2 glow-verisig">
-                <ShieldCheck className="w-5 h-5 text-green-500" />
-                <span className="text-sm font-medium text-green-500">Verisig Verified</span>
+            <div className="absolute -top-2 -right-2 sm:-top-4 sm:-right-4 z-10">
+              <div className="bg-[#111117] border border-green-500/30 rounded-xl px-3 sm:px-4 py-2 flex items-center gap-2 glow-verisig">
+                <ShieldCheck className="w-4 h-4 sm:w-5 sm:h-5 text-green-500" />
+                <span className="text-xs sm:text-sm font-medium text-green-500">Verisig Verified</span>
               </div>
             </div>
 
             {/* JSON Proof Preview */}
-            <div className="bg-[#111117] rounded-2xl border border-white/10 p-6 font-mono text-sm">
+            <div className="bg-[#111117] rounded-2xl border border-white/10 p-4 sm:p-6 font-mono text-xs sm:text-sm">
               <div className="flex items-center gap-2 mb-4">
                 <div className="w-3 h-3 rounded-full bg-red-500" />
                 <div className="w-3 h-3 rounded-full bg-yellow-500" />
                 <div className="w-3 h-3 rounded-full bg-green-500" />
                 <span className="ml-2 text-gray-500 text-xs">proof.json</span>
               </div>
-              <pre className="text-gray-300 overflow-x-auto">
+              <pre className="text-gray-300 overflow-x-auto text-xs sm:text-sm">
 {`{
   "type": "dns_verification",
   "domain": "api.kintify.cloud",
@@ -299,14 +300,14 @@ const HeroSection = () => {
             </div>
 
             {/* HTTP Proof Badge */}
-            <div className="mt-4 bg-[#111117] rounded-xl border border-white/10 p-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-green-500/20 rounded-lg flex items-center justify-center">
-                  <Shield className="w-5 h-5 text-green-500" />
+            <div className="mt-3 sm:mt-4 bg-[#111117] rounded-xl border border-white/10 p-3 sm:p-4">
+              <div className="flex items-center gap-2 sm:gap-3">
+                <div className="w-8 h-8 sm:w-10 sm:h-10 bg-green-500/20 rounded-lg flex items-center justify-center flex-shrink-0">
+                  <Shield className="w-4 h-4 sm:w-5 sm:h-5 text-green-500" />
                 </div>
                 <div>
-                  <p className="font-medium">Verified by Kintify</p>
-                  <p className="text-sm text-gray-400">HTTP Header Proof Valid</p>
+                  <p className="font-medium text-sm sm:text-base">Verified by Kintify</p>
+                  <p className="text-xs sm:text-sm text-gray-400">HTTP Header Proof Valid</p>
                 </div>
               </div>
             </div>
@@ -1164,10 +1165,10 @@ const Footer = () => {
           <div>
             <h4 className="font-semibold mb-4">Company</h4>
             <ul className="space-y-2 text-sm text-gray-400">
-              <li><a href="#" className="hover:text-white transition-colors">About</a></li>
-              <li><a href="#" className="hover:text-white transition-colors">Blog</a></li>
-              <li><a href="#" className="hover:text-white transition-colors">Pricing</a></li>
-              <li><a href="#" className="hover:text-white transition-colors">Contact</a></li>
+              <li><a href="/about" className="hover:text-white transition-colors">About</a></li>
+              <li><a href="/blog" className="hover:text-white transition-colors">Blog</a></li>
+              <li><a href="/pricing" className="hover:text-white transition-colors">Pricing</a></li>
+              <li><a href="/contact" className="hover:text-white transition-colors">Contact</a></li>
             </ul>
           </div>
         </div>
@@ -1192,19 +1193,57 @@ const Footer = () => {
 
 // ==================== MAIN PAGE ====================
 export default function LandingPage() {
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "Organization",
+        "name": "Kintify",
+        "url": "https://kintify.cloud",
+        "logo": "https://kintify.cloud/logo.svg",
+        "sameAs": ["https://www.linkedin.com/company/kintify"],
+      },
+      {
+        "@type": "SoftwareApplication",
+        "name": "Kintify VeriKernel",
+        "url": "https://kintify.cloud",
+        "applicationCategory": "SecurityApplication",
+        "operatingSystem": "Web",
+        description:
+          "Kintify VeriKernel publishes cryptographic trust proofs for cloud infrastructure using DNS, HTTP and machine readable verification endpoints.",
+        offers: {
+          "@type": "Offer",
+          price: "0",
+          priceCurrency: "USD",
+        },
+        provider: {
+          "@type": "Organization",
+          name: "Kintify",
+        },
+      },
+    ],
+  };
+
   return (
-    <main className="min-h-screen overflow-x-hidden">
-      <Navbar />
-      <HeroSection />
-      <ProblemSection />
-      <SystemSection />
-      <LiveOutputSection />
-      <VerificationSection />
-      <AudienceSection />
+    <>
+      <Script
+        id="json-ld"
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+      <main className="min-h-screen overflow-x-hidden">
+        <Navbar />
+        <HeroSection />
+        <ProblemSection />
+        <SystemSection />
+        <LiveOutputSection />
+        <VerificationSection />
+        <AudienceSection />
       <PricingSection />
       <FAQSection />
       <FinalCTA />
       <Footer />
-    </main>
+      </main>
+    </>
   );
 }

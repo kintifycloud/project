@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import Script from "next/script";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { GuaranteeInput } from "@/components/GuaranteeInput";
@@ -13,8 +14,28 @@ export const metadata: Metadata = {
 };
 
 export default function GuaranteePage() {
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "Service",
+    name: "Kintify Guarantee",
+    url: "https://kintify.cloud/guarantee",
+    description:
+      "Proof backed cloud reliability assurance with validated fixes and continuous trust signals.",
+    serviceType: "Cloud Reliability Assurance",
+    provider: {
+      "@type": "Organization",
+      name: "Kintify",
+    },
+  };
+
   return (
-    <main className="min-h-screen bg-zinc-950">
+    <>
+      <Script
+        id="json-ld-guarantee"
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+      <main className="min-h-screen bg-zinc-950">
       <header className="sticky top-0 z-20 border-b border-zinc-800/60 bg-zinc-950/90 backdrop-blur-md">
         <div className="mx-auto flex h-12 w-full max-w-5xl items-center justify-between px-4 sm:px-6">
           <div className="flex items-center gap-2">
@@ -80,6 +101,7 @@ export default function GuaranteePage() {
       <footer className="border-t border-zinc-800/60 px-4 py-6 text-center">
         <p className="font-mono text-xs text-zinc-600">Built for system confidence</p>
       </footer>
-    </main>
+      </main>
+    </>
   );
 }

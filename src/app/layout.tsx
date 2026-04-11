@@ -18,7 +18,7 @@ export const metadata: Metadata = {
   icons: {
     icon: "/kintify-icone.ico",
   },
-  title: "Kintify VeriKernel | Fix, Trace, and Verify Systems Instantly",
+  title: "Kintify | Fix, Trace, and Verify Systems Instantly",
   description:
     "Find root cause, apply exact fixes, and verify outcomes instantly. Kintify turns system complexity into provable truth.",
   keywords: [
@@ -33,7 +33,7 @@ export const metadata: Metadata = {
   ],
   authors: [{ name: "Kintify" }],
   openGraph: {
-    title: "Kintify VeriKernel | Fix, Trace and Verify Systems Instantly",
+    title: "Kintify | Fix, Trace and Verify Systems Instantly",
     description:
       "Find root cause, apply exact fixes, and verify outcomes instantly. Kintify turns system complexity into provable truth.",
     url: "https://kintify.cloud",
