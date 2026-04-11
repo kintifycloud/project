@@ -158,6 +158,18 @@ Rules:
 
       const llm = await analyzeWithLLM(input);
 
+      if (
+        llm.cause === "Analysis unavailable" ||
+        llm.explanation === "Unable to analyze due to API or parsing error. Please try again."
+      ) {
+        return Promise.reject({
+          success: false,
+          provider: "openrouter",
+          error:
+            "OpenRouter analysis failed (check OPENROUTER_API_KEY, network, or model availability).",
+        } satisfies FixApiError);
+      }
+
       return {
         success: true,
         provider: "openrouter",
