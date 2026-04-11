@@ -99,14 +99,22 @@ export function LiveInput() {
       let result: LiveResult;
       
       if (trimmed) {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 30000);
+
         const res = await fetch("/api/live", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ input: trimmed }),
+          signal: controller.signal,
         });
+
+        clearTimeout(timeoutId);
 
         if (res.ok) {
           const data = await res.json();
+          console.log("LIVE API RESPONSE:", data);
+
           if (data && !data.error) {
             // Combine API insight with mock metrics
             const mockMetrics = generateMockMetrics();
@@ -120,6 +128,8 @@ export function LiveInput() {
             result = generateMockMetrics();
           }
         } else {
+          const errorData = await res.json().catch(() => ({}));
+          console.error("Live API error:", errorData.error || res.status);
           result = generateMockMetrics();
         }
       } else {
@@ -138,7 +148,38 @@ export function LiveInput() {
 
     } catch (err) {
       console.error("Live API error:", err);
-      setError("Failed to start live analysis. Please try again.");
+
+      if (err instanceof Error) {
+        if (err.name === "AbortError") {
+          setError("Request timed out. Using simulated data instead.");
+          // Fallback to mock metrics on timeout
+          const result = generateMockMetrics();
+          setLiveData(result);
+          setIsRunning(true);
+          scrollToOutput();
+
+          intervalRef.current = setInterval(() => {
+            const updatedMetrics = generateMockMetrics();
+            setLiveData(updatedMetrics);
+          }, 4000);
+        } else if (err.message.includes("fetch")) {
+          setError("Network error. Using simulated data instead.");
+          // Fallback to mock metrics on network error
+          const result = generateMockMetrics();
+          setLiveData(result);
+          setIsRunning(true);
+          scrollToOutput();
+
+          intervalRef.current = setInterval(() => {
+            const updatedMetrics = generateMockMetrics();
+            setLiveData(updatedMetrics);
+          }, 4000);
+        } else {
+          setError(err.message || "Failed to start live analysis. Please try again.");
+        }
+      } else {
+        setError("Failed to start live analysis. Please try again.");
+      }
     } finally {
       setLoading(false);
     }

@@ -42,3 +42,28 @@ export function getTrustStatusColor(status: TrustStatus): string {
       return "bg-red-400/10 border-red-400/30 text-red-300";
   }
 }
+
+export function isTrustResult(data: unknown): data is TrustResult {
+  if (!data || typeof data !== "object") return false;
+
+  const d = data as TrustResult;
+
+  return (
+    typeof d.score === "number" &&
+    typeof d.status === "string" &&
+    typeof d.breakdown === "object" &&
+    typeof d.breakdown.stability === "number" &&
+    typeof d.breakdown.errors === "number" &&
+    typeof d.breakdown.performance === "number" &&
+    typeof d.breakdown.verification === "number" &&
+    typeof d.insight === "string"
+  );
+}
+
+export function safeParseJson(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}

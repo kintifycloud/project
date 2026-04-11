@@ -7,46 +7,9 @@ import { Loader2, Play } from "lucide-react";
 import { ErrorState } from "@/components/ErrorState";
 import { Button } from "@/components/ui/button";
 import type { TrustResult } from "@/lib/trust";
-import { calculateTrustScore, getTrustStatus } from "@/lib/trust";
+import { calculateTrustScore, getTrustStatus, isTrustResult } from "@/lib/trust";
 
 import { TrustOutput } from "./TrustOutput";
-
-// Mock data generator simulating combined data from /live, /verify, /flow
-function generateMockTrustData(): TrustResult {
-  // Simulate breakdown values from different modules
-  const stability = 70 + Math.floor(Math.random() * 30); // 70-100
-  const errors = 65 + Math.floor(Math.random() * 35); // 65-100
-  const performance = 68 + Math.floor(Math.random() * 32); // 68-100
-  const verification = 72 + Math.floor(Math.random() * 28); // 72-100
-
-  const breakdown = {
-    stability,
-    errors,
-    performance,
-    verification,
-  };
-
-  const score = calculateTrustScore(breakdown);
-  const status = getTrustStatus(score);
-
-  const insights = [
-    "System is stable but performance may degrade under peak traffic.",
-    "All systems operating within normal parameters. Trust score is high.",
-    "Verification shows some inconsistencies. Review recent changes.",
-    "Error rate is elevated. Monitor for potential instability.",
-    "Performance metrics are excellent. System is highly reliable.",
-    "Stability is good but verification needs attention before deployment.",
-  ];
-
-  const insight = insights[Math.floor(Math.random() * insights.length)] ?? "System trust calculated successfully.";
-
-  return {
-    score,
-    status,
-    breakdown,
-    insight,
-  };
-};
 
 export function TrustInput() {
   const [input, setInput] = useState("");
@@ -63,32 +26,73 @@ export function TrustInput() {
   }
 
   async function calculateTrust() {
+    const trimmed = input.trim();
+    if (!trimmed) {
+      setError("Please enter a system description to calculate trust score.");
+      return;
+    }
+
     setLoading(true);
     setError(null);
 
     try {
-      // Simulate API call delay
-      await new Promise((resolve) => setTimeout(resolve, 1500));
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000);
 
-      // Generate mock trust data (in production, this would combine real data from /live, /verify, /flow)
-      const result = generateMockTrustData();
-      setTrustData(result);
-      scrollToOutput();
+      const res = await fetch("/api/trust", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ input: trimmed }),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || `API returned ${res.status}`);
+      }
+
+      const data: unknown = await res.json();
+
+      console.log("TRUST API RESPONSE:", data);
+
+      if (!data) {
+        throw new Error("No data received from API");
+      }
+
+      if (isTrustResult(data)) {
+        setTrustData(data);
+        scrollToOutput();
+      } else {
+        throw new Error("Invalid response format from API");
+      }
     } catch (err) {
-      console.error("Trust calculation error:", err);
-      setError("Failed to calculate trust score. Please try again.");
+      console.error("Trust API error:", err);
+
+      if (err instanceof Error) {
+        if (err.name === "AbortError") {
+          setError("Request timed out. Please try again.");
+        } else if (err.message.includes("fetch")) {
+          setError("Network error. Please check your connection.");
+        } else {
+          setError(err.message || "Failed to calculate trust score. Please try again.");
+        }
+      } else {
+        setError("Failed to calculate trust score. Please try again.");
+      }
     } finally {
       setLoading(false);
     }
   }
 
-  const isDisabled = loading;
+  const isDisabled = loading || input.trim().length === 0;
 
   return (
     <div className="w-full">
       <div className="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900 transition-colors focus-within:border-indigo-500/50 focus-within:shadow-[0_0_0_3px_rgba(99,102,241,0.07)]">
         <textarea
-          className="min-h-[148px] w-full resize-none bg-transparent px-5 py-4 font-mono text-sm text-zinc-200 placeholder:text-zinc-600 focus:outline-none disabled:opacity-50"
+          className="min-h-[148px] w-full resize-none bg-transparent px-4 py-4 font-mono text-sm text-zinc-200 placeholder:text-zinc-600 focus:outline-none disabled:opacity-50 sm:px-5 sm:min-h-[160px]"
           disabled={loading}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => {
@@ -100,7 +104,7 @@ export function TrustInput() {
           value={input}
         />
 
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-zinc-800/60 px-5 py-3">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-zinc-800/60 px-4 py-3 sm:px-5 sm:py-4">
           <span className="font-mono text-[11px] text-zinc-600">
             {input.length > 0 ? `${input.length} chars` : "Leave empty for auto-calculation"}
           </span>

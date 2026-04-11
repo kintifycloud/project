@@ -73,30 +73,58 @@ export function TraceInput() {
 
   async function handleTrace() {
     const trimmed = input.trim();
-    if (!trimmed) return;
+    if (!trimmed) {
+      setError("Please enter logs or an incident description to trace.");
+      return;
+    }
 
     setLoading(true);
     setError(null);
     setTrace(null);
 
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000);
+
       const res = await fetch("/api/trace", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ input: trimmed }),
+        signal: controller.signal,
       });
 
+      clearTimeout(timeoutId);
+
       if (!res.ok) {
-        throw new Error(`API returned ${res.status}`);
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || `API returned ${res.status}`);
       }
 
       const data: unknown = await res.json();
+
+      console.log("TRACE API RESPONSE:", data);
+
+      if (!data) {
+        throw new Error("No data received from API");
+      }
+
       const parsed = parseTraceApiResponse(data);
       setTrace(parsed);
       scrollToOutput();
     } catch (err) {
       console.error("Trace API error:", err);
-      setError("Failed to trace system behavior. Please try again.");
+
+      if (err instanceof Error) {
+        if (err.name === "AbortError") {
+          setError("Request timed out. Please try again.");
+        } else if (err.message.includes("fetch")) {
+          setError("Network error. Please check your connection.");
+        } else {
+          setError(err.message || "Failed to trace system behavior. Please try again.");
+        }
+      } else {
+        setError("Failed to trace system behavior. Please try again.");
+      }
     } finally {
       setLoading(false);
     }

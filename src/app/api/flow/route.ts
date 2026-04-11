@@ -9,10 +9,13 @@ export async function POST(req: Request) {
     const input = (body?.input as string | undefined) || "";
 
     if (!input || input.trim().length === 0) {
+      console.error("FLOW API: Empty input received");
       return NextResponse.json({ error: "Input is required." }, { status: 400 });
     }
 
     const cleanInput = input.slice(0, 6000);
+
+    console.log("FLOW API: Starting flow analysis for input:", cleanInput.slice(0, 100));
 
     const system =
       "You are a system behavior analyst. Convert system data into behavior flow, pattern, and risk.";
@@ -39,6 +42,7 @@ System data/logs to analyze:
 ${cleanInput}
 """`;
 
+    console.log("FLOW API: Calling OpenRouter LLM");
     const res = await openai.chat.completions.create({
       model: "openchat/openchat-7b",
       messages: [
@@ -51,16 +55,20 @@ ${cleanInput}
 
     const text = res.choices[0]?.message?.content || "";
 
+    console.log("FLOW API: LLM response received, parsing JSON");
+
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     const parsed = safeParseJson(jsonMatch ? jsonMatch[0] : "");
 
     if (isFlowResult(parsed)) {
+      console.log("FLOW API: Valid flow result, returning");
       return NextResponse.json({
         ...parsed,
         confidence: clampConfidence(parsed.confidence),
       });
     }
 
+    console.error("FLOW API: Invalid response format from LLM");
     return NextResponse.json(
       {
         error: "Invalid response format",
@@ -69,7 +77,7 @@ ${cleanInput}
       { status: 200 },
     );
   } catch (error) {
-    console.error("Flow API error:", error);
+    console.error("FLOW API: Error:", error);
     return NextResponse.json({ error: "Could not analyze flow. Please try again." }, { status: 500 });
   }
 }

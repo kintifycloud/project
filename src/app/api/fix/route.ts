@@ -7,23 +7,25 @@ export async function POST(req: Request) {
     const input = body.input || "";
 
     if (!input || input.trim().length === 0) {
+      console.error("API: Empty input received");
       return NextResponse.json({
         error: "Input is required.",
       }, { status: 400 });
     }
 
-    console.log("Starting analysis for input:", input.slice(0, 100));
+    console.log("API: Starting analysis for input:", input.slice(0, 100));
 
     // Try LLM analysis first
     let result;
     try {
+      console.log("API: Attempting LLM analysis with OpenRouter");
       result = await analyzeWithLLM(input);
-      console.log("LLM analysis successful, category:", result.category);
+      console.log("API: LLM analysis successful, category:", result.category);
     } catch (llmError) {
-      console.error("LLM analysis failed, falling back to mock analyzer:", llmError);
+      console.error("API: LLM analysis failed, falling back to mock analyzer:", llmError);
       // Fallback to mock analyzer
       result = analyzeInput(input);
-      console.log("Mock analysis used, category:", result.category);
+      console.log("API: Mock analysis used, category:", result.category);
     }
 
     // Return only AnalysisResult fields (strip LlmAnalysisResult extras)
@@ -36,9 +38,10 @@ export async function POST(req: Request) {
       prevention: result.prevention,
     };
 
+    console.log("API: Returning analysis result");
     return NextResponse.json(analysisResult);
   } catch (error) {
-    console.error("Fix API error:", error);
+    console.error("API: Fix API error:", error);
     return NextResponse.json({
       error: "Could not analyze issue. Please try again.",
     }, { status: 500 });

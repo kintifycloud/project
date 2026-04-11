@@ -108,21 +108,31 @@ export function FixInput({ defaultValue = "", showOutput = true }: FixInputProps
   // ── Main analysis call ──────────────────────────────────────────────────
   async function handleFix() {
     const trimmed = input.trim();
-    if (!trimmed) return;
+    if (!trimmed) {
+      setError("Please enter an issue to analyze.");
+      return;
+    }
 
     setLoading(true);
     setError(null);
     setOutput(null);
 
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000);
+
       const res = await fetch("/api/fix", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ input: trimmed }),
+        signal: controller.signal,
       });
 
+      clearTimeout(timeoutId);
+
       if (!res.ok) {
-        throw new Error(`API returned ${res.status}`);
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || `API returned ${res.status}`);
       }
 
       const data: unknown = await res.json();
@@ -130,12 +140,27 @@ export function FixInput({ defaultValue = "", showOutput = true }: FixInputProps
       // Debug — confirm data is arriving
       console.log("API RESPONSE:", data);
 
+      if (!data) {
+        throw new Error("No data received from API");
+      }
+
       const parsed = parseApiResponse(data);
       setOutput(parsed);
       scrollToOutput();
     } catch (err) {
       console.error("Fix API error:", err);
-      setError("Failed to analyze issue. Please try again.");
+
+      if (err instanceof Error) {
+        if (err.name === "AbortError") {
+          setError("Request timed out. Please try again.");
+        } else if (err.message.includes("fetch")) {
+          setError("Network error. Please check your connection.");
+        } else {
+          setError(err.message || "Failed to analyze issue. Please try again.");
+        }
+      } else {
+        setError("Failed to analyze issue. Please try again.");
+      }
     } finally {
       setLoading(false);
     }

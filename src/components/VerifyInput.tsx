@@ -70,30 +70,58 @@ export function VerifyInput() {
 
   async function handleVerify() {
     const trimmed = input.trim();
-    if (!trimmed) return;
+    if (!trimmed) {
+      setError("Please enter a fix description or system state to verify.");
+      return;
+    }
 
     setLoading(true);
     setError(null);
     setVerifyData(null);
 
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000);
+
       const res = await fetch("/api/verify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ input: trimmed }),
+        signal: controller.signal,
       });
 
+      clearTimeout(timeoutId);
+
       if (!res.ok) {
-        throw new Error(`API returned ${res.status}`);
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || `API returned ${res.status}`);
       }
 
       const data: unknown = await res.json();
+
+      console.log("VERIFY API RESPONSE:", data);
+
+      if (!data) {
+        throw new Error("No data received from API");
+      }
+
       const parsed = parseVerifyApiResponse(data);
       setVerifyData(parsed);
       scrollToOutput();
     } catch (err) {
       console.error("Verify API error:", err);
-      setError("Failed to verify system. Please try again.");
+
+      if (err instanceof Error) {
+        if (err.name === "AbortError") {
+          setError("Request timed out. Please try again.");
+        } else if (err.message.includes("fetch")) {
+          setError("Network error. Please check your connection.");
+        } else {
+          setError(err.message || "Failed to verify system. Please try again.");
+        }
+      } else {
+        setError("Failed to verify system. Please try again.");
+      }
     } finally {
       setLoading(false);
     }

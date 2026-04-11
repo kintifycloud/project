@@ -1122,6 +1122,97 @@ const FinalCTA = () => {
   );
 };
 
+// ==================== TRUSTPILOT SECTION ====================
+const TrustpilotSection = () => {
+  return (
+    <section className="py-16 sm:py-20 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-5xl mx-auto">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.5 }}
+          className="bg-[#111117]/50 backdrop-blur-sm rounded-2xl border border-indigo-500/20 p-8 sm:p-12 text-center hover:border-indigo-500/40 hover:shadow-xl hover:shadow-indigo-500/10 transition-all duration-300"
+        >
+          {/* Badge */}
+          <div className="inline-flex items-center gap-2 bg-indigo-500/10 border border-indigo-500/30 rounded-full px-4 py-2 mb-6">
+            <Shield className="w-4 h-4 text-indigo-400" />
+            <span className="text-sm font-medium text-indigo-300">Trusted by users</span>
+          </div>
+
+          {/* Headline */}
+          <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold mb-4">
+            Built with trust.{" "}
+            <span className="gradient-text">Backed by real users.</span>
+          </h2>
+
+          {/* Supporting Text */}
+          <p className="text-base sm:text-lg text-gray-400 mb-8 max-w-2xl mx-auto">
+            See what users say about Kintify's cloud trust and infrastructure experience.
+          </p>
+
+          {/* Trustpilot Box */}
+          <div className="bg-[#0a0a0f]/80 backdrop-blur-sm rounded-xl border border-white/10 p-6 sm:p-8 mb-8">
+            {/* Trustpilot Logo Style */}
+            <div className="flex items-center justify-center gap-2 mb-4">
+              <div className="flex items-center gap-1">
+                {[...Array(5)].map((_, i) => (
+                  <svg
+                    key={i}
+                    className="w-5 h-5 sm:w-6 sm:h-6"
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                  >
+                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                  </svg>
+                ))}
+              </div>
+              <span className="text-lg sm:text-xl font-semibold text-white">Excellent</span>
+            </div>
+
+            {/* 5-Star Visual Row */}
+            <div className="flex items-center justify-center gap-1 mb-3">
+              {[...Array(5)].map((_, i) => (
+                <StarIcon key={i} />
+              ))}
+            </div>
+
+            {/* Microcopy */}
+            <p className="text-sm text-gray-400 mb-2">Rated highly by users</p>
+
+            {/* Review Trust Statement */}
+            <p className="text-base sm:text-lg text-gray-300 font-medium">
+              Real feedback from users building with Kintify.
+            </p>
+          </div>
+
+          {/* CTA Button */}
+          <a
+            href="https://www.trustpilot.com/review/kintify.cloud"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 bg-indigo-500 hover:bg-indigo-600 text-white px-6 sm:px-8 py-3 sm:py-4 rounded-xl font-medium transition-all duration-200 hover:shadow-lg hover:shadow-indigo-500/25"
+          >
+            Read reviews on Trustpilot
+            <ExternalLink className="w-4 h-4" />
+          </a>
+        </motion.div>
+      </div>
+    </section>
+  );
+};
+
+// Star Icon Component
+const StarIcon = () => (
+  <svg
+    className="w-5 h-5 sm:w-6 sm:h-6 text-green-400"
+    viewBox="0 0 24 24"
+    fill="currentColor"
+  >
+    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+  </svg>
+);
+
 // ==================== FOOTER ====================
 const Footer = () => {
   return (
@@ -1242,6 +1333,7 @@ export default function LandingPage() {
       <PricingSection />
       <FAQSection />
       <FinalCTA />
+      <TrustpilotSection />
       <Footer />
       </main>
     </>

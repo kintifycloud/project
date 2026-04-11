@@ -9,10 +9,13 @@ export async function POST(req: Request) {
     const input = (body?.input as string | undefined) || "";
 
     if (!input || input.trim().length === 0) {
+      console.error("VERIFY API: Empty input received");
       return NextResponse.json({ error: "Input is required." }, { status: 400 });
     }
 
     const cleanInput = input.slice(0, 6000);
+
+    console.log("VERIFY API: Starting verification for input:", cleanInput.slice(0, 100));
 
     const system =
       "You are a system verification engine. Determine if a fix is successful based on signals. Return a clear verification result.";
@@ -38,6 +41,7 @@ Fix description or system state to verify:
 ${cleanInput}
 """`;
 
+    console.log("VERIFY API: Calling OpenRouter LLM");
     const res = await openai.chat.completions.create({
       model: "openchat/openchat-7b",
       messages: [
@@ -50,16 +54,20 @@ ${cleanInput}
 
     const text = res.choices[0]?.message?.content || "";
 
+    console.log("VERIFY API: LLM response received, parsing JSON");
+
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     const parsed = safeParseJson(jsonMatch ? jsonMatch[0] : "");
 
     if (isVerifyResult(parsed)) {
+      console.log("VERIFY API: Valid verify result, returning");
       return NextResponse.json({
         ...parsed,
         confidence: clampConfidence(parsed.confidence),
       });
     }
 
+    console.error("VERIFY API: Invalid response format from LLM");
     return NextResponse.json(
       {
         error: "Invalid response format",
@@ -68,7 +76,7 @@ ${cleanInput}
       { status: 200 },
     );
   } catch (error) {
-    console.error("Verify API error:", error);
+    console.error("VERIFY API: Error:", error);
     return NextResponse.json({ error: "Could not verify system. Please try again." }, { status: 500 });
   }
 }

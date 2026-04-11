@@ -41,3 +41,24 @@ export function getLevelColor(level: GuaranteeLevel): string {
       return "bg-red-400/10 border-red-400/30 text-red-300";
   }
 }
+
+export function isGuaranteeResult(data: unknown): data is GuaranteeResult {
+  if (!data || typeof data !== "object") return false;
+
+  const d = data as GuaranteeResult;
+
+  return (
+    typeof d.successProbability === "number" &&
+    typeof d.regressionRisk === "string" &&
+    typeof d.stabilityWindow === "string" &&
+    typeof d.level === "string"
+  );
+}
+
+export function safeParseJson(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
