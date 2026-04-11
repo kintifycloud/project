@@ -145,13 +145,18 @@ export default function FixPage() {
 
                     const data = (await res.json().catch(() => null)) as FixApiResponse | null;
 
-                    if (!res.ok || !data) {
+                    if (!data) {
                       setError("Failed to analyze issue. Please try again.");
                       return;
                     }
 
                     if (data.success === false) {
                       setError(data.error);
+                      return;
+                    }
+
+                    if (!res.ok) {
+                      setError("Failed to analyze issue. Please try again.");
                       return;
                     }
 

@@ -1,3 +1,45 @@
+import { analyzeWithLLM } from "@/lib/analyzer";
+
+type FixApiSuccess = {
+  success: true;
+  rootCause: string;
+  fixPlan: string[];
+  expectedOutcome: string;
+  confidence: number;
+  provider: "gemini" | "openrouter";
+};
+
+type FixApiError = {
+  success: false;
+  error: string;
+  provider?: "gemini" | "openrouter";
+  upstreamStatus?: number;
+};
+
+function parseGeminiStructured(text: string): Omit<FixApiSuccess, "success" | "provider"> {
+  const rootCause = text.split("Root Cause:")[1]?.split("Fix Plan:")[0]?.trim() ?? "";
+
+  const fixPlanRaw = text.split("Fix Plan:")[1]?.split("Expected Outcome:")[0] ?? "";
+  const fixPlan = fixPlanRaw
+    .split("\n")
+    .map((line) => line.replace(/^[-*\u2022\s]+/, "").trim())
+    .filter(Boolean);
+
+  const expectedOutcome =
+    text.split("Expected Outcome:")[1]?.split("Confidence:")[0]?.trim() ?? "";
+
+  const confidenceRaw = text.split("Confidence:")[1]?.trim() ?? "";
+  let confidence = Number.parseInt(confidenceRaw, 10);
+  if (!Number.isFinite(confidence)) confidence = 0;
+
+  return {
+    rootCause,
+    fixPlan,
+    expectedOutcome,
+    confidence,
+  };
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -7,14 +49,14 @@ export async function POST(req: Request) {
       return Response.json({
         success: false,
         error: "Input is required",
-      });
+      }, { status: 400 });
     }
 
-    if (!process.env.GEMINI_API_KEY) {
+    if (!process.env.GEMINI_API_KEY && !process.env.OPENROUTER_API_KEY) {
       return Response.json({
         success: false,
         error: "Server is not configured",
-      });
+      } satisfies FixApiError, { status: 500 });
     }
 
     const prompt = `
@@ -47,66 +89,112 @@ Rules:
 - no empty sections
 `;
 
-    const res = await fetch(
-      "https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=" +
-        process.env.GEMINI_API_KEY,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
+    const tryGemini = async (): Promise<FixApiSuccess> => {
+      if (!process.env.GEMINI_API_KEY) {
+        throw new Error("Gemini not configured");
+      }
+
+      const res = await fetch(
+        "https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=" +
+          process.env.GEMINI_API_KEY,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            contents: [
+              {
+                parts: [{ text: prompt }],
+              },
+            ],
+          }),
         },
-        body: JSON.stringify({
-          contents: [
-            {
-              parts: [{ text: prompt }],
-            },
-          ],
-        }),
-      },
-    );
+      );
 
-    const data = await res.json().catch(() => null);
-    const text: string =
-      data?.candidates?.[0]?.content?.parts?.[0]?.text ?
-        String(data.candidates[0].content.parts[0].text)
-      :
-        "";
+      const raw = await res.text();
+      const data = (() => {
+        try {
+          return JSON.parse(raw);
+        } catch {
+          return null;
+        }
+      })();
 
-    if (!res.ok || !text) {
-      return Response.json({
-        success: false,
-        error: "Failed to analyze issue. Please try again.",
-      });
+      const text: string =
+        data?.candidates?.[0]?.content?.parts?.[0]?.text ?
+          String(data.candidates[0].content.parts[0].text)
+        :
+          "";
+
+      if (!res.ok || !text) {
+        const upstreamMessage =
+          typeof data?.error?.message === "string" ? data.error.message : undefined;
+
+        return Promise.reject({
+          success: false,
+          provider: "gemini",
+          error:
+            upstreamMessage ?
+              `Gemini error: ${upstreamMessage}`
+            :
+              "Failed to analyze issue. Please try again.",
+          upstreamStatus: res.status,
+        } satisfies FixApiError);
+      }
+
+      const parsed = parseGeminiStructured(text);
+      return {
+        success: true,
+        provider: "gemini",
+        ...parsed,
+      };
+    };
+
+    const tryOpenRouter = async (): Promise<FixApiSuccess> => {
+      if (!process.env.OPENROUTER_API_KEY) {
+        throw new Error("OpenRouter not configured");
+      }
+
+      const llm = await analyzeWithLLM(input);
+
+      return {
+        success: true,
+        provider: "openrouter",
+        rootCause: llm.cause ?? "",
+        fixPlan: Array.isArray(llm.fix) ? llm.fix : [],
+        expectedOutcome: llm.improvement ?? llm.explanation ?? "",
+        confidence:
+          typeof llm.confidence === "number" ?
+            Math.max(0, Math.min(100, Math.round(llm.confidence)))
+          :
+            0,
+      };
+    };
+
+    try {
+      const result = await tryGemini();
+      return Response.json(result);
+    } catch (geminiErr) {
+      try {
+        const result = await tryOpenRouter();
+        return Response.json(result);
+      } catch {
+        const maybe = geminiErr as Partial<FixApiError> | undefined;
+        const payload: FixApiError = {
+          success: false,
+          error: maybe?.error ?? "Failed to analyze issue. Please try again.",
+          ...(maybe?.provider ? { provider: maybe.provider } : {}),
+          ...(typeof maybe?.upstreamStatus === "number" ? { upstreamStatus: maybe.upstreamStatus } : {}),
+        };
+
+        return Response.json(payload, { status: 502 });
+      }
     }
-
-    const rootCause = text.split("Root Cause:")[1]?.split("Fix Plan:")[0]?.trim();
-
-    const fixPlanRaw = text.split("Fix Plan:")[1]?.split("Expected Outcome:")[0];
-    const fixPlan = fixPlanRaw
-      ?.split("\n")
-      .map((line: string) => line.replace(/^[-*\u2022\s]+/, "").trim())
-      .filter(Boolean);
-
-    const expectedOutcome = text
-      .split("Expected Outcome:")[1]
-      ?.split("Confidence:")[0]
-      ?.trim();
-
-    const confidenceRaw = text.split("Confidence:")[1]?.trim();
-    let confidence = Number.parseInt(confidenceRaw ?? "", 10);
-    if (!Number.isFinite(confidence)) confidence = 0;
-
-    return Response.json({
-      success: true,
-      rootCause: rootCause ?? "",
-      fixPlan: fixPlan ?? [],
-      expectedOutcome: expectedOutcome ?? "",
-      confidence,
-    });
   } catch {
     return Response.json({
       success: false,
       error: "Failed to analyze issue. Please try again.",
-    });
+    }, { status: 500 });
   }
 }
