@@ -40,15 +40,10 @@ const Navbar = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center">
-              <Zap className="w-5 h-5 text-white" />
-            </div>
-            <span className="text-xl font-semibold tracking-tight">
-              <span className="bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">Kintify</span>
-              <span className="font-normal text-zinc-300"> Cloud</span>
-            </span>
-          </div>
+          <span className="text-xl font-semibold tracking-tight">
+            <span className="bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">Kintify</span>
+            <span className="font-normal text-zinc-300"> Cloud</span>
+          </span>
 
           {/* Desktop Nav */}
           <div className="hidden lg:flex items-center gap-1">
@@ -103,11 +98,11 @@ const Navbar = () => {
       <AnimatePresence>
         {mobileMenuOpen && (
           <motion.div
-            initial={{ opacity: 0, maxHeight: 0 }}
-            animate={{ opacity: 1, maxHeight: 500 }}
-            exit={{ opacity: 0, maxHeight: 0 }}
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
             transition={{ duration: 0.3, ease: "easeInOut" }}
-            className="lg:hidden bg-[#0a0a0f] border-t border-white/10 overflow-hidden"
+            className="lg:hidden bg-[#0a0a0f] border-t border-white/10 overflow-hidden relative z-40"
           >
             <div className="px-4 py-4 space-y-2">
               <div className="border-b border-white/10 pb-4 mb-4">
@@ -178,25 +173,18 @@ const HeroSection = () => {
   const [error, setError] = useState("");
   const [isFocused, setIsFocused] = useState(false);
 
-  const samplePrompts = useMemo(
-    () => [
-      "Kubernetes pods stuck in CrashLoopBackOff",
-      "Database connections timing out under load",
-      "API p95 latency increased after deploy",
-      "SSL handshake failed on production domain",
-      "High CPU usage causing service slowdown",
-      "Intermittent 502 errors behind load balancer",
-    ],
-    [],
-  );
-
   const handleFixIssue = async () => {
-    if (loading || input.trim().length === 0) return;
+    console.log("[Hero] Button clicked, input:", input);
+    if (loading || input.trim().length === 0) {
+      console.log("[Hero] Request blocked - loading:", loading, "input empty:", input.trim().length === 0);
+      return;
+    }
     setError("");
     setResult(null);
     setLoading(true);
 
     try {
+      console.log("[Hero] Calling /api/hero");
       const res = await fetch("/api/hero", {
         method: "POST",
         headers: {
@@ -207,7 +195,9 @@ const HeroSection = () => {
         }),
       });
 
+      console.log("[Hero] Response status:", res.status);
       const data = (await res.json().catch(() => null)) as { success: boolean; answer?: string; error?: string } | null;
+      console.log("[Hero] Response data:", data);
 
       if (!data) {
         setError("Failed to analyze issue. Please try again.");
@@ -225,7 +215,8 @@ const HeroSection = () => {
       }
 
       setResult({ answer: data.answer || "" });
-    } catch {
+    } catch (err) {
+      console.error("[Hero] Error:", err);
       setError("Failed to analyze issue. Please try again.");
     } finally {
       setLoading(false);
@@ -283,28 +274,6 @@ const HeroSection = () => {
                 </div>
               </div>
 
-              {/* Sample Issue Chips */}
-              <div className="mb-6">
-                <p className="mb-3 text-xs text-gray-500">Try a sample issue</p>
-                <div className="flex flex-wrap gap-2">
-                  {samplePrompts.map((prompt) => (
-                    <motion.button
-                      key={prompt}
-                      type="button"
-                      onClick={() => {
-                        setInput(prompt);
-                        setError("");
-                      }}
-                      whileHover={{ y: -2 }}
-                      whileTap={{ scale: 0.98 }}
-                      className="rounded-full border border-white/10 bg-[#111117]/50 px-4 py-2 text-xs text-gray-300 transition-all duration-200 hover:border-indigo-500/50 hover:bg-indigo-500/10 hover:text-white hover:shadow-[0_0_20px_rgba(99,102,241,0.15)] active:scale-95"
-                    >
-                      {prompt}
-                    </motion.button>
-                  ))}
-                </div>
-              </div>
-
               {/* Error */}
               {error.length > 0 ? (
                 <div className="mb-4 text-sm text-red-400">{error}</div>
@@ -339,22 +308,6 @@ const HeroSection = () => {
                   </div>
                 </div>
               )}
-
-              {/* Trust Indicators */}
-              <div className="flex flex-wrap gap-4 text-sm text-gray-400">
-                <span className="flex items-center gap-1">
-                  <CheckCircle2 className="w-4 h-4 text-green-500" />
-                  No setup
-                </span>
-                <span className="flex items-center gap-1">
-                  <CheckCircle2 className="w-4 h-4 text-green-500" />
-                  No guesswork
-                </span>
-                <span className="flex items-center gap-1">
-                  <CheckCircle2 className="w-4 h-4 text-green-500" />
-                  Proof included
-                </span>
-              </div>
             </motion.div>
           </div>
 

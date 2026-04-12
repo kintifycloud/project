@@ -19,27 +19,27 @@ function getFastPathResponse(input: string): string | null {
   const lowerInput = input.toLowerCase();
 
   if (lowerInput.includes("crashloopbackoff") || lowerInput.includes("crash loop")) {
-    return "Likely startup failure, bad config, or dependency crash. Check pod logs, recent config changes, and health probes.";
+    return "Your pods are likely failing during startup due to config issues, dependency failures, or failing health checks. Review recent config changes, inspect startup logs, and verify readiness probes to restore stability.";
   }
 
   if (lowerInput.includes("ssl handshake") || lowerInput.includes("ssl certificate") || lowerInput.includes("tls")) {
-    return "Likely certificate mismatch, expired cert, or TLS config issue. Verify cert chain, domain binding, and renewal status.";
+    return "Your TLS failure is likely caused by an expired certificate, invalid chain, or domain mismatch. Verify certificate validity, domain bindings, and renewal status to restore secure connections.";
   }
 
   if (lowerInput.includes("502") || lowerInput.includes("bad gateway")) {
-    return "Likely upstream timeout or unhealthy backend. Check load balancer target health and app logs.";
+    return "Your upstream service may be timing out, unhealthy, or unreachable behind the load balancer. Check backend health, timeout settings, and recent deploy changes to restore traffic flow.";
   }
 
   if (lowerInput.includes("latency") || lowerInput.includes("slow") || lowerInput.includes("timeout")) {
-    return "Likely slow queries, blocking I/O, or resource contention. Check recent deploy changes and trace slow endpoints.";
+    return "Your deployment likely introduced slower query paths or increased memory pressure on specific requests. Check recent code changes, trace slow endpoints, and review DB performance. Rolling back the latest release should quickly restore latency if the issue is critical.";
   }
 
   if (lowerInput.includes("database") && lowerInput.includes("connection")) {
-    return "Likely connection pool exhaustion or network issue. Check DB pool settings, connection limits, and network connectivity.";
+    return "Your database connections are likely exhausting due to unclosed connections or insufficient pool sizing. Review connection pool settings, implement proper cleanup, and monitor connection limits to restore availability.";
   }
 
   if (lowerInput.includes("memory") || lowerInput.includes("oom")) {
-    return "Likely memory leak or insufficient allocation. Check memory usage, optimize allocations, and increase limits if needed.";
+    return "Your application is likely experiencing memory leaks or insufficient allocation under load. Profile memory usage, identify leaking allocations, and increase memory limits if needed to stabilize the service.";
   }
 
   return null;

@@ -70,18 +70,6 @@ export default function FixPage() {
     }
   }, [result]);
 
-  const samplePrompts = useMemo(
-    () => [
-      "Kubernetes pods stuck in CrashLoopBackOff",
-      "Database connections timing out under load",
-      "API p95 latency increased after deploy",
-      "SSL handshake failed on production domain",
-      "High CPU usage causing service slowdown",
-      "Intermittent 502 errors behind load balancer",
-    ],
-    [],
-  );
-
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "WebApplication",
@@ -147,28 +135,6 @@ export default function FixPage() {
               placeholder="Paste logs, cloud errors, or describe your issue…"
               className="w-full min-h-[180px] sm:min-h-[140px] resize-none rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3 text-base text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-zinc-700 focus:ring-2 focus:ring-indigo-500/20 sm:text-sm"
             />
-
-            <div className="mt-4">
-              <p className="mb-3 text-xs text-zinc-500">Try a sample issue</p>
-              <div className="flex flex-wrap gap-2">
-                {samplePrompts.map((prompt) => (
-                  <motion.button
-                    key={prompt}
-                    type="button"
-                    onClick={() => {
-                      setInput(prompt);
-                      setError("");
-                      textareaRef.current?.focus();
-                    }}
-                    whileHover={{ y: -2 }}
-                    whileTap={{ scale: 0.98 }}
-                    className="rounded-full border border-zinc-800/80 bg-zinc-950/50 px-3 sm:px-4 py-2.5 text-xs sm:text-xs text-zinc-300 transition-all duration-200 hover:border-indigo-500/50 hover:bg-indigo-500/10 hover:text-zinc-100 hover:shadow-[0_0_20px_rgba(99,102,241,0.15)] active:scale-95"
-                  >
-                    {prompt}
-                  </motion.button>
-                ))}
-              </div>
-            </div>
 
             <div className="mt-6">
               <button

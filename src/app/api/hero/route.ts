@@ -12,10 +12,13 @@ type HeroApiError = {
 
 export async function POST(req: Request) {
   try {
+    console.log("[Hero API] Request received");
     const body = await req.json();
     const input = body.input?.trim();
+    console.log("[Hero API] Input:", input);
 
     if (!input) {
+      console.log("[Hero API] No input provided");
       return Response.json({
         success: false,
         error: "Input is required",
@@ -23,18 +26,22 @@ export async function POST(req: Request) {
     }
 
     if (!process.env.OPENROUTER_API_KEY) {
+      console.log("[Hero API] OPENROUTER_API_KEY not configured");
       return Response.json({
         success: false,
         error: "Hero analysis not configured",
       } satisfies HeroApiError, { status: 500 });
     }
 
+    console.log("[Hero API] Calling analyzeWithLLM");
     const llm = await analyzeWithLLM(input);
+    console.log("[Hero API] LLM response:", llm);
 
     if (
       llm.cause === "Analysis unavailable" ||
       llm.explanation === "Unable to analyze due to API or parsing error. Please try again."
     ) {
+      console.log("[Hero API] LLM analysis failed");
       return Response.json({
         success: false,
         error: "Unable to analyze issue. Please try again.",
@@ -68,11 +75,13 @@ export async function POST(req: Request) {
       finalAnswer = sentences.slice(0, 4).join(". ") + ".";
     }
 
+    console.log("[Hero API] Final answer:", finalAnswer);
     return Response.json({
       success: true,
       answer: finalAnswer,
     } satisfies HeroApiSuccess);
-  } catch {
+  } catch (err) {
+    console.error("[Hero API] Error:", err);
     return Response.json({
       success: false,
       error: "Failed to analyze issue. Please try again.",
