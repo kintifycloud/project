@@ -11,9 +11,9 @@ export function FixLoader({ className }: FixLoaderProps) {
   const steps = useMemo(
     () => [
       "Reading logs...",
-      "Detecting root cause...",
-      "Analyzing dependencies...",
-      "Generating fix plan...",
+      "Tracing dependencies...",
+      "Checking likely root causes...",
+      "Building fix plan...",
     ],
     [],
   );

@@ -1,14 +1,25 @@
 ﻿"use client";
 
-import { useMemo, useRef, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import { useMemo, useRef, useState, useEffect } from "react";
 import Script from "next/script";
 
 import { FixLoader } from "@/components/FixLoader";
 
 type FixApiSuccess = {
   success: true;
+  deepPatternReasoning: string;
+  ethicalLogicalIntelligence: string;
+  strategicDecisionEngine: string[];
+  predictiveModeling: string;
+  efficiencyOptimization: string;
+  confidence: number;
+};
+
+// Simple frontend display mapping
+type SimpleFixDisplay = {
   rootCause: string;
-  fixPlan: string[];
+  recommendedFix: string[];
   expectedOutcome: string;
   confidence: number;
 };
@@ -26,7 +37,101 @@ export default function FixPage() {
   const [result, setResult] = useState<FixApiSuccess | null>(null);
   const [error, setError] = useState("");
 
+  // Progressive reveal states (simple user-friendly names)
+  const [revealedRootCause, setRevealedRootCause] = useState("");
+  const [revealedRecommendedFix, setRevealedRecommendedFix] = useState<string[]>([]);
+  const [revealedExpectedOutcome, setRevealedExpectedOutcome] = useState("");
+  const [visibleCards, setVisibleCards] = useState<Set<"rootCause" | "recommendedFix" | "expectedOutcome" | "confidence">>(new Set());
+  const [isTypingRootCause, setIsTypingRootCause] = useState(false);
+  const [isTypingExpectedOutcome, setIsTypingExpectedOutcome] = useState(false);
+
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  // Map complex backend response to simple frontend display
+  const mapToSimpleDisplay = (backend: FixApiSuccess): SimpleFixDisplay => {
+    return {
+      rootCause: backend.deepPatternReasoning,
+      recommendedFix: backend.strategicDecisionEngine,
+      expectedOutcome: backend.predictiveModeling,
+      confidence: backend.confidence,
+    };
+  };
+
+  // Typewriter effect for text
+  useEffect(() => {
+    if (result) {
+      const simpleDisplay = mapToSimpleDisplay(result);
+
+      // Reset reveal states
+      setRevealedRootCause("");
+      setRevealedRecommendedFix([]);
+      setRevealedExpectedOutcome("");
+      setVisibleCards(new Set());
+      setIsTypingRootCause(false);
+      setIsTypingExpectedOutcome(false);
+
+      const intervals: NodeJS.Timeout[] = [];
+
+      // Progressive card reveal
+      const revealSequence = async () => {
+        // Reveal Root Cause first
+        await new Promise(resolve => setTimeout(resolve, 100));
+        setVisibleCards(prev => new Set([...prev, "rootCause"]));
+
+        // Typewriter effect for Root Cause
+        const rootCauseText = simpleDisplay.rootCause;
+        let rootCauseIndex = 0;
+        setIsTypingRootCause(true);
+        const rootCauseInterval = setInterval(() => {
+          if (rootCauseIndex < rootCauseText.length) {
+            setRevealedRootCause(rootCauseText.slice(0, rootCauseIndex + 1));
+            rootCauseIndex++;
+          } else {
+            clearInterval(rootCauseInterval);
+            setIsTypingRootCause(false);
+          }
+        }, 15);
+        intervals.push(rootCauseInterval);
+
+        await new Promise(resolve => setTimeout(resolve, 800));
+        setVisibleCards(prev => new Set([...prev, "recommendedFix"]));
+
+        // Progressive reveal for Recommended Fix steps
+        const recommendedFixSteps = simpleDisplay.recommendedFix;
+        for (let i = 0; i < recommendedFixSteps.length; i++) {
+          await new Promise(resolve => setTimeout(resolve, 300));
+          setRevealedRecommendedFix(prev => [...prev, recommendedFixSteps[i] as string]);
+        }
+
+        await new Promise(resolve => setTimeout(resolve, 500));
+        setVisibleCards(prev => new Set([...prev, "expectedOutcome"]));
+
+        // Typewriter effect for Expected Outcome
+        const expectedOutcomeText = simpleDisplay.expectedOutcome;
+        let expectedOutcomeIndex = 0;
+        setIsTypingExpectedOutcome(true);
+        const expectedOutcomeInterval = setInterval(() => {
+          if (expectedOutcomeIndex < expectedOutcomeText.length) {
+            setRevealedExpectedOutcome(expectedOutcomeText.slice(0, expectedOutcomeIndex + 1));
+            expectedOutcomeIndex++;
+          } else {
+            clearInterval(expectedOutcomeInterval);
+            setIsTypingExpectedOutcome(false);
+          }
+        }, 15);
+        intervals.push(expectedOutcomeInterval);
+
+        await new Promise(resolve => setTimeout(resolve, 600));
+        setVisibleCards(prev => new Set([...prev, "confidence"]));
+      };
+
+      revealSequence();
+
+      return () => {
+        intervals.forEach(interval => clearInterval(interval));
+      };
+    }
+  }, [result]);
 
   const samplePrompts = useMemo(
     () => [
@@ -189,43 +294,91 @@ export default function FixPage() {
                   </div>
                 ) : (
                   <div className="space-y-5 text-sm text-zinc-200">
-                    <div className="grid gap-2">
-                      <div className="text-xs font-medium tracking-wide text-zinc-400">
-                        Root Cause
-                      </div>
-                      <div className="leading-relaxed text-zinc-100">
-                        {result.rootCause}
-                      </div>
-                    </div>
+                    <AnimatePresence>
+                      {visibleCards.has("rootCause") && (
+                        <motion.div
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ duration: 0.3, ease: "easeOut" }}
+                          className="grid gap-2"
+                        >
+                          <div className="text-xs font-medium tracking-wide text-zinc-400">
+                            Root Cause
+                          </div>
+                          <div className="leading-relaxed text-zinc-100">
+                            {revealedRootCause}
+                            {isTypingRootCause && (
+                              <span className="inline-block w-2 h-4 bg-indigo-400 ml-1 animate-pulse" />
+                            )}
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
 
-                    <div className="grid gap-2">
-                      <div className="text-xs font-medium tracking-wide text-zinc-400">
-                        Fix Plan
-                      </div>
-                      <ol className="list-decimal space-y-1 pl-5 text-zinc-100">
-                        {result.fixPlan.map((step, idx) => (
-                          <li key={`${idx}-${step}`} className="leading-relaxed">
-                            {step}
-                          </li>
-                        ))}
-                      </ol>
-                    </div>
+                    <AnimatePresence>
+                      {visibleCards.has("recommendedFix") && (
+                        <motion.div
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ duration: 0.3, ease: "easeOut" }}
+                          className="grid gap-2"
+                        >
+                          <div className="text-xs font-medium tracking-wide text-zinc-400">
+                            Recommended Fix
+                          </div>
+                          <ol className="list-decimal space-y-1 pl-5 text-zinc-100">
+                            {revealedRecommendedFix.map((step, idx) => (
+                              <motion.li
+                                key={`${idx}-${step}`}
+                                initial={{ opacity: 0, x: -10 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                transition={{ duration: 0.2, ease: "easeOut" }}
+                                className="leading-relaxed"
+                              >
+                                {step}
+                              </motion.li>
+                            ))}
+                          </ol>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
 
-                    <div className="grid gap-2">
-                      <div className="text-xs font-medium tracking-wide text-zinc-400">
-                        Expected Outcome
-                      </div>
-                      <div className="leading-relaxed text-zinc-100">
-                        {result.expectedOutcome}
-                      </div>
-                    </div>
+                    <AnimatePresence>
+                      {visibleCards.has("expectedOutcome") && (
+                        <motion.div
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ duration: 0.3, ease: "easeOut" }}
+                          className="grid gap-2"
+                        >
+                          <div className="text-xs font-medium tracking-wide text-zinc-400">
+                            Expected Outcome
+                          </div>
+                          <div className="leading-relaxed text-zinc-100">
+                            {revealedExpectedOutcome}
+                            {isTypingExpectedOutcome && (
+                              <span className="inline-block w-2 h-4 bg-indigo-400 ml-1 animate-pulse" />
+                            )}
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
 
-                    <div className="flex items-center gap-2 text-xs text-zinc-400">
-                      <span>Confidence</span>
-                      <span className="rounded-md border border-zinc-800 bg-zinc-900 px-2 py-1 text-zinc-200">
-                        {result.confidence}%
-                      </span>
-                    </div>
+                    <AnimatePresence>
+                      {visibleCards.has("confidence") && (
+                        <motion.div
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ duration: 0.3, ease: "easeOut" }}
+                          className="flex items-center gap-2 text-xs text-zinc-400"
+                        >
+                          <span>Confidence</span>
+                          <span className="rounded-md border border-zinc-800 bg-zinc-900 px-2 py-1 text-zinc-200">
+                            {result.confidence}%
+                          </span>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                   </div>
                 )}
               </div>

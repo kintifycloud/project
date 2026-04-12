@@ -2,9 +2,11 @@ import { analyzeWithLLM } from "@/lib/analyzer";
 
 type FixApiSuccess = {
   success: true;
-  rootCause: string;
-  fixPlan: string[];
-  expectedOutcome: string;
+  deepPatternReasoning: string;
+  ethicalLogicalIntelligence: string;
+  strategicDecisionEngine: string[];
+  predictiveModeling: string;
+  efficiencyOptimization: string;
   confidence: number;
   provider: "gemini" | "openrouter";
 };
@@ -17,25 +19,30 @@ type FixApiError = {
 };
 
 function parseGeminiStructured(text: string): Omit<FixApiSuccess, "success" | "provider"> {
-  const rootCause = text.split("Root Cause:")[1]?.split("Fix Plan:")[0]?.trim() ?? "";
+  const deepPatternReasoning = text.split("Deep Pattern Reasoning:")[1]?.split("Ethical + Logical Intelligence:")[0]?.trim() ?? "";
 
-  const fixPlanRaw = text.split("Fix Plan:")[1]?.split("Expected Outcome:")[0] ?? "";
-  const fixPlan = fixPlanRaw
+  const ethicalLogicalIntelligence = text.split("Ethical + Logical Intelligence:")[1]?.split("Strategic Decision Engine:")[0]?.trim() ?? "";
+
+  const strategicDecisionEngineRaw = text.split("Strategic Decision Engine:")[1]?.split("Predictive Modeling:")[0] ?? "";
+  const strategicDecisionEngine = strategicDecisionEngineRaw
     .split("\n")
-    .map((line) => line.replace(/^[-*\u2022\s]+/, "").trim())
+    .map((line) => line.replace(/^[-*\u2022\s]+\d*\.?\s*/, "").trim())
     .filter(Boolean);
 
-  const expectedOutcome =
-    text.split("Expected Outcome:")[1]?.split("Confidence:")[0]?.trim() ?? "";
+  const predictiveModeling = text.split("Predictive Modeling:")[1]?.split("Efficiency Optimization:")[0]?.trim() ?? "";
+
+  const efficiencyOptimization = text.split("Efficiency Optimization:")[1]?.split("Confidence:")[0]?.trim() ?? "";
 
   const confidenceRaw = text.split("Confidence:")[1]?.trim() ?? "";
   let confidence = Number.parseInt(confidenceRaw, 10);
   if (!Number.isFinite(confidence)) confidence = 0;
 
   return {
-    rootCause,
-    fixPlan,
-    expectedOutcome,
+    deepPatternReasoning,
+    ethicalLogicalIntelligence,
+    strategicDecisionEngine,
+    predictiveModeling,
+    efficiencyOptimization,
     confidence,
   };
 }
@@ -60,7 +67,7 @@ export async function POST(req: Request) {
     }
 
     const prompt = `
-You are a senior Site Reliability Engineer.
+You are a senior Site Reliability Engineer and cloud infrastructure expert.
 
 Analyze the following issue:
 
@@ -68,25 +75,32 @@ ${input}
 
 Return EXACTLY in this format:
 
-Root Cause:
-<clear cause>
+Deep Pattern Reasoning:
+Identify likely hidden issue patterns, infer root technical causes, and explain why this happened.
 
-Fix Plan:
-- step 1
-- step 2
-- step 3
+Ethical + Logical Intelligence:
+Avoid overclaiming. Clearly distinguish confirmed findings from likely assumptions. Provide technically honest reasoning.
 
-Expected Outcome:
-<result>
+Strategic Decision Engine:
+Recommend exact next actions, best fix order, and highest impact first.
+
+Predictive Modeling:
+Estimate likely impact if unresolved, probable future failures, and system risk trends.
+
+Efficiency Optimization:
+Suggest ways to prevent recurrence, performance improvements, and trust/infra hardening tips.
 
 Confidence:
 <number between 70–95>
 
 Rules:
-- concise
-- actionable
+- concise but valuable
+- highly readable
+- technically credible
 - no fluff
-- no empty sections
+- no robotic repetition
+- no huge paragraphs
+- premium tone: calm confidence, trustworthy
 `;
 
     const tryGemini = async (): Promise<FixApiSuccess> => {
@@ -230,9 +244,11 @@ Rules:
       return {
         success: true,
         provider: "openrouter",
-        rootCause: llm.cause ?? "",
-        fixPlan: Array.isArray(llm.fix) ? llm.fix : [],
-        expectedOutcome: llm.improvement ?? llm.explanation ?? "",
+        deepPatternReasoning: llm.cause ?? "Unable to determine pattern reasoning from fallback analysis.",
+        ethicalLogicalIntelligence: "Analysis based on available data. Some assumptions may be made due to limited context.",
+        strategicDecisionEngine: Array.isArray(llm.fix) ? llm.fix : ["Review system logs", "Check resource utilization", "Verify configuration"],
+        predictiveModeling: llm.improvement ?? llm.explanation ?? "Unable to predict future impact without additional context.",
+        efficiencyOptimization: "Monitor system metrics and implement automated alerting for early detection.",
         confidence:
           typeof llm.confidence === "number" ?
             Math.max(0, Math.min(100, Math.round(llm.confidence)))
