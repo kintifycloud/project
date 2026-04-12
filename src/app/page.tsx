@@ -2,7 +2,7 @@
 /* eslint-disable @next/next/no-html-link-for-pages */
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Script from "next/script";
 import {
@@ -44,7 +44,10 @@ const Navbar = () => {
             <div className="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center">
               <Zap className="w-5 h-5 text-white" />
             </div>
-            <span className="text-xl font-bold">Kintify</span>
+            <span className="text-xl font-semibold tracking-tight">
+              <span className="bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">Kintify</span>
+              <span className="font-normal text-zinc-300"> Cloud</span>
+            </span>
           </div>
 
           {/* Desktop Nav */}
@@ -169,22 +172,64 @@ const NavDropdownItem = ({
 
 // ==================== HERO SECTION ====================
 const HeroSection = () => {
-  const [inputValue, setInputValue] = useState("");
+  const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<{ answer: string } | null>(null);
+  const [error, setError] = useState("");
   const [isFocused, setIsFocused] = useState(false);
-  const [showDemo, setShowDemo] = useState(false);
 
-  const handleFixIssue = () => {
-    if (inputValue.trim()) {
-      setShowDemo(true);
+  const samplePrompts = useMemo(
+    () => [
+      "Kubernetes pods stuck in CrashLoopBackOff",
+      "Database connections timing out under load",
+      "API p95 latency increased after deploy",
+      "SSL handshake failed on production domain",
+      "High CPU usage causing service slowdown",
+      "Intermittent 502 errors behind load balancer",
+    ],
+    [],
+  );
+
+  const handleFixIssue = async () => {
+    if (loading || input.trim().length === 0) return;
+    setError("");
+    setResult(null);
+    setLoading(true);
+
+    try {
+      const res = await fetch("/api/hero", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          input,
+        }),
+      });
+
+      const data = (await res.json().catch(() => null)) as { success: boolean; answer?: string; error?: string } | null;
+
+      if (!data) {
+        setError("Failed to analyze issue. Please try again.");
+        return;
+      }
+
+      if (data.success === false) {
+        setError(data.error || "Failed to analyze issue. Please try again.");
+        return;
+      }
+
+      if (!res.ok) {
+        setError("Failed to analyze issue. Please try again.");
+        return;
+      }
+
+      setResult({ answer: data.answer || "" });
+    } catch {
+      setError("Failed to analyze issue. Please try again.");
+    } finally {
+      setLoading(false);
     }
-  };
-
-  const handleTryExample = () => {
-    setInputValue(`[2024-01-15 10:23:45] ERROR: Connection timeout to database
-[2024-01-15 10:23:46] WARN: Retry attempt 1/3 failed
-[2024-01-15 10:23:47] ERROR: Failed to establish connection after 3 retries
-[2024-01-15 10:23:47] INFO: Database pool exhausted`);
-    setShowDemo(true);
   };
 
   return (
@@ -208,7 +253,7 @@ const HeroSection = () => {
               </p>
 
               {/* Input Box */}
-              <div className="relative mb-6">
+              <div className="mb-4">
                 <div
                   className={`relative rounded-2xl border transition-all duration-200 ${
                     isFocused
@@ -217,8 +262,8 @@ const HeroSection = () => {
                   }`}
                 >
                   <textarea
-                    value={inputValue}
-                    onChange={(e) => setInputValue(e.target.value)}
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
                     onFocus={() => setIsFocused(true)}
                     onBlur={() => setIsFocused(false)}
                     placeholder="Paste logs, errors, or describe your issue..."
@@ -226,8 +271,10 @@ const HeroSection = () => {
                   />
                   <div className="absolute bottom-3 right-3 flex items-center gap-2">
                     <button
+                      type="button"
+                      disabled={loading || input.trim().length === 0}
                       onClick={handleFixIssue}
-                      className="bg-indigo-500 hover:bg-indigo-600 text-white px-4 sm:px-5 py-2 rounded-xl font-medium transition-colors flex items-center gap-2 text-sm sm:text-base"
+                      className="bg-indigo-500 hover:bg-indigo-600 text-white px-4 sm:px-5 py-2 rounded-xl font-medium transition-colors flex items-center gap-2 text-sm sm:text-base disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       Fix Issue
                       <ArrowRight className="w-4 h-4" />
@@ -236,16 +283,62 @@ const HeroSection = () => {
                 </div>
               </div>
 
-              {/* Buttons */}
-              <div className="flex flex-wrap gap-4 mb-8">
-                <button
-                  onClick={handleTryExample}
-                  className="text-gray-300 hover:text-white transition-colors text-sm flex items-center gap-2"
-                >
-                  <Activity className="w-4 h-4" />
-                  Try Example
-                </button>
+              {/* Sample Issue Chips */}
+              <div className="mb-6">
+                <p className="mb-3 text-xs text-gray-500">Try a sample issue</p>
+                <div className="flex flex-wrap gap-2">
+                  {samplePrompts.map((prompt) => (
+                    <motion.button
+                      key={prompt}
+                      type="button"
+                      onClick={() => {
+                        setInput(prompt);
+                        setError("");
+                      }}
+                      whileHover={{ y: -2 }}
+                      whileTap={{ scale: 0.98 }}
+                      className="rounded-full border border-white/10 bg-[#111117]/50 px-4 py-2 text-xs text-gray-300 transition-all duration-200 hover:border-indigo-500/50 hover:bg-indigo-500/10 hover:text-white hover:shadow-[0_0_20px_rgba(99,102,241,0.15)] active:scale-95"
+                    >
+                      {prompt}
+                    </motion.button>
+                  ))}
+                </div>
               </div>
+
+              {/* Error */}
+              {error.length > 0 ? (
+                <div className="mb-4 text-sm text-red-400">{error}</div>
+              ) : null}
+
+              {/* Loading */}
+              {loading ? (
+                <div className="mb-6">
+                  <div className="flex flex-col items-center justify-center gap-3 p-8 rounded-xl border border-white/10 bg-[#111117]">
+                    <motion.div
+                      className="h-8 w-8 rounded-full border-2 border-indigo-400/30 border-t-indigo-400"
+                      animate={{ rotate: 360 }}
+                      transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                    />
+                    <motion.p
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ delay: 0.1, duration: 0.3 }}
+                      className="text-sm font-medium text-gray-300"
+                    >
+                      Wait a little bit...
+                    </motion.p>
+                  </div>
+                </div>
+              ) : null}
+
+              {/* Result Output */}
+              {result && (
+                <div className="mb-6 rounded-xl border border-dashed border-white/10 bg-[#111117]/40 px-4 py-10">
+                  <div className="text-sm text-gray-200">
+                    <p className="leading-relaxed text-white">{result.answer}</p>
+                  </div>
+                </div>
+              )}
 
               {/* Trust Indicators */}
               <div className="flex flex-wrap gap-4 text-sm text-gray-400">
@@ -314,66 +407,6 @@ const HeroSection = () => {
             </div>
           </motion.div>
         </div>
-
-        {/* Demo Output */}
-        <AnimatePresence>
-          {showDemo && (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              className="mt-12 bg-[#111117] rounded-2xl border border-white/10 p-6"
-            >
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="font-semibold text-lg">Analysis Result</h3>
-                <div className="flex items-center gap-2">
-                  <span className="text-green-500 text-sm flex items-center gap-1">
-                    <CheckCircle2 className="w-4 h-4" />
-                    Verisig Verified
-                  </span>
-                </div>
-              </div>
-              <div className="grid md:grid-cols-2 gap-6">
-                <div>
-                  <h4 className="text-sm font-medium text-gray-400 mb-2">Root Cause</h4>
-                  <p className="text-white">
-                    Database connection pool exhausted due to unclosed connections in the connection
-                    handler. The pool max size (10) was reached and all connections timed out.
-                  </p>
-                </div>
-                <div>
-                  <h4 className="text-sm font-medium text-gray-400 mb-2">Fix Plan</h4>
-                  <ol className="space-y-2 text-sm">
-                    <li className="flex items-start gap-2">
-                      <span className="text-indigo-400 font-medium">1.</span>
-                      <span>Add connection pooling with max 50 connections</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <span className="text-indigo-400 font-medium">2.</span>
-                      <span>Implement proper connection cleanup in finally block</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <span className="text-indigo-400 font-medium">3.</span>
-                      <span>Add connection health checks every 30 seconds</span>
-                    </li>
-                  </ol>
-                </div>
-              </div>
-              <div className="mt-6">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium text-gray-400">Confidence Score</span>
-                  <span className="text-sm font-medium text-green-500">94%</span>
-                </div>
-                <div className="h-2 bg-white/10 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-gradient-to-r from-indigo-500 to-green-500 rounded-full"
-                    style={{ width: "94%" }}
-                  />
-                </div>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
       </div>
     </section>
   );

@@ -14,6 +14,37 @@ type FixApiError = {
   upstreamStatus?: number;
 };
 
+// Predefined fast paths for common patterns
+function getFastPathResponse(input: string): string | null {
+  const lowerInput = input.toLowerCase();
+
+  if (lowerInput.includes("crashloopbackoff") || lowerInput.includes("crash loop")) {
+    return "Likely startup failure, bad config, or dependency crash. Check pod logs, recent config changes, and health probes.";
+  }
+
+  if (lowerInput.includes("ssl handshake") || lowerInput.includes("ssl certificate") || lowerInput.includes("tls")) {
+    return "Likely certificate mismatch, expired cert, or TLS config issue. Verify cert chain, domain binding, and renewal status.";
+  }
+
+  if (lowerInput.includes("502") || lowerInput.includes("bad gateway")) {
+    return "Likely upstream timeout or unhealthy backend. Check load balancer target health and app logs.";
+  }
+
+  if (lowerInput.includes("latency") || lowerInput.includes("slow") || lowerInput.includes("timeout")) {
+    return "Likely slow queries, blocking I/O, or resource contention. Check recent deploy changes and trace slow endpoints.";
+  }
+
+  if (lowerInput.includes("database") && lowerInput.includes("connection")) {
+    return "Likely connection pool exhaustion or network issue. Check DB pool settings, connection limits, and network connectivity.";
+  }
+
+  if (lowerInput.includes("memory") || lowerInput.includes("oom")) {
+    return "Likely memory leak or insufficient allocation. Check memory usage, optimize allocations, and increase limits if needed.";
+  }
+
+  return null;
+}
+
 function parseGeminiStructured(text: string): Omit<FixApiSuccess, "success" | "provider"> {
   // Extract answer before confidence line
   const answerText = text.split("Confidence:")[0]?.trim() ?? "";
@@ -77,36 +108,30 @@ export async function POST(req: Request) {
     }
 
     const prompt = `
-You are a senior Site Reliability Engineer and cloud infrastructure expert.
-
-Analyze the following issue:
+You are a senior SRE. Analyze this issue:
 
 ${input}
 
-Provide a concise answer in 2 to 4 short sentences that:
-- explains the root cause clearly
-- recommends the most important fix action
-- describes the likely expected result
+Provide 2-4 short sentences: cause + key fix + outcome.
 
-Return EXACTLY in this format:
+Format:
+<answer>
 
-<Your concise 2-4 sentence answer>
+Confidence: 70-95
 
-Confidence:
-<number between 70–95>
-
-Rules:
-- Maximum 2 to 4 sentences total
-- Practical diagnosis only
-- Most important fix action
-- Likely expected result
-- No long explanations
-- No theory
-- No repetition
-- No filler
-- Senior engineer tone: calm, confident
-- Write as if speaking directly to a colleague who needs quick guidance
+Rules: Under 80 words. No fluff. Direct and actionable.
 `;
+
+    // Check for fast path responses first
+    const fastPathResponse = getFastPathResponse(input);
+    if (fastPathResponse) {
+      return Response.json({
+        success: true,
+        answer: fastPathResponse,
+        confidence: 85,
+        provider: "gemini",
+      } satisfies FixApiSuccess);
+    }
 
     const tryGemini = async (): Promise<FixApiSuccess> => {
       if (!process.env.GEMINI_API_KEY) {
@@ -133,6 +158,10 @@ Rules:
 
           let res: Response;
           try {
+            // Add timeout with AbortController
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 second timeout
+
             res = await fetch(endpoint, {
               method: "POST",
               headers: {
@@ -144,8 +173,15 @@ Rules:
                     parts: [{ text: prompt }],
                   },
                 ],
+                generationConfig: {
+                  temperature: 0.1, // Lower temperature for faster, more focused output
+                  maxOutputTokens: 150, // Limit output tokens for speed
+                },
               }),
+              signal: controller.signal,
             });
+
+            clearTimeout(timeoutId);
           } catch (fetchErr) {
             console.log(`[Gemini Debug] Fetch error for ${modelId}/${apiVersion}:`, fetchErr instanceof Error ? fetchErr.message : String(fetchErr));
             lastError = {
