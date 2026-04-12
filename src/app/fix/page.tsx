@@ -542,6 +542,18 @@ export default function FixPage() {
       return;
     }
 
+    const persistedUsageCount = readFixUsageCount();
+    const effectiveUsageCount = Math.max(usageCount, persistedUsageCount);
+
+    if (persistedUsageCount !== usageCount) {
+      setUsageCount(persistedUsageCount);
+    }
+
+    if (effectiveUsageCount >= FIX_FREE_LIMIT) {
+      setError("");
+      return;
+    }
+
     if (source === "main") {
       const nextGuidance = getInputGuidanceMessage(trimmedInput);
 
@@ -699,6 +711,7 @@ export default function FixPage() {
   const suggestedNextChecks = result ? getSuggestedNextChecks(latestIssueContext, result.answer).slice(0, 4) : [];
   const displayedUsageCount = Math.min(usageCount, FIX_FREE_LIMIT);
   const freeFixesLeft = Math.max(FIX_FREE_LIMIT - usageCount, 0);
+  const hasReachedFreeLimit = usageCount >= FIX_FREE_LIMIT;
   const currentLoadingMessage = FIX_LOADING_MESSAGES[loadingMessageIndex] ?? FIX_LOADING_MESSAGES[0];
   const shouldShowTrustPreview = usageCount === 0 && !loading && result === null;
   const currentTrustPreview = FIX_TRUST_PREVIEW_MESSAGES[trustPreviewIndex] ?? FIX_TRUST_PREVIEW_MESSAGES[0];
@@ -767,7 +780,7 @@ export default function FixPage() {
             <div className="mt-6">
               <button
                 type="button"
-                disabled={loading || input.trim().length === 0}
+                disabled={loading || hasReachedFreeLimit || input.trim().length === 0}
                 onClick={() => {
                   void submitIssue(input, "main");
                 }}
@@ -777,8 +790,15 @@ export default function FixPage() {
               </button>
 
               <div className="mt-2 text-xs text-zinc-500">
-                {freeFixesLeft > 0 ? `Free fixes left in this browser: ${freeFixesLeft}` : `${displayedUsageCount} of ${FIX_FREE_LIMIT} free fixes used`}
+                {hasReachedFreeLimit ? `${displayedUsageCount} of ${FIX_FREE_LIMIT} free fixes used` : `Free fixes left: ${freeFixesLeft}`}
               </div>
+
+              {hasReachedFreeLimit ? (
+                <div className="mt-2 text-xs text-zinc-500">
+                  <div>You’ve used your free Kintify fixes for now.</div>
+                  <div className="mt-1 text-zinc-600">Please come back later or continue when access resets.</div>
+                </div>
+              ) : null}
 
               <div className="mt-3 flex items-center gap-2 text-[11px] text-zinc-500">
                 <span className="h-1.5 w-1.5 rounded-full bg-indigo-400/70" />
@@ -909,10 +929,10 @@ export default function FixPage() {
                     {(analysisDurationMs !== null || generationDurationMs !== null) ? (
                       <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-zinc-500">
                         {analysisDurationMs !== null ? (
-                          <span>Analyzed in {formatDurationLabel(analysisDurationMs)}</span>
+                          <span>Analysis completed in {formatDurationLabel(analysisDurationMs)}</span>
                         ) : null}
                         {generationDurationMs !== null ? (
-                          <span>Fix generated in {formatDurationLabel(generationDurationMs)}</span>
+                          <span>Live issue analysis completed in {formatDurationLabel(generationDurationMs)}</span>
                         ) : null}
                       </div>
                     ) : null}
@@ -1024,7 +1044,7 @@ export default function FixPage() {
                           />
                           <button
                             type="button"
-                            disabled={loading || followUpInput.trim().length === 0}
+                            disabled={loading || hasReachedFreeLimit || followUpInput.trim().length === 0}
                             onClick={() => {
                               void submitIssue(followUpInput, "follow_up");
                             }}
