@@ -92,17 +92,91 @@
     @apply bg-white/5 backdrop-blur-xl border border-white/10;
   }
 
+  .glass-card {
+    background: linear-gradient(135deg, rgba(17,17,23,0.8) 0%, rgba(17,17,23,0.4) 100%);
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(255,255,255,0.06);
+  }
+
+  .glass-card-hover {
+    background: linear-gradient(135deg, rgba(17,17,23,0.9) 0%, rgba(17,17,23,0.5) 100%);
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(255,255,255,0.1);
+  }
+
   .gradient-text {
     @apply bg-clip-text text-transparent bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400;
   }
 
+  .gradient-text-subtle {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-indigo-300 to-indigo-500;
+  }
+
   .glow-primary {
-    box-shadow: 0 0 40px rgba(99, 102, 241, 0.3);
+    box-shadow: 0 0 60px rgba(99, 102, 241, 0.25), 0 0 120px rgba(99, 102, 241, 0.1);
+  }
+
+  .glow-primary-sm {
+    box-shadow: 0 0 30px rgba(99, 102, 241, 0.2);
   }
 
   .glow-verisig {
     box-shadow: 0 0 40px rgba(34, 197, 94, 0.3);
   }
+
+  .glow-card {
+    box-shadow: 0 0 0 1px rgba(255,255,255,0.05), 0 8px 40px rgba(0,0,0,0.4);
+  }
+
+  .section-padding {
+    @apply py-24 sm:py-32 px-4 sm:px-6 lg:px-8;
+  }
+}
+
+/* Animated grid background */
+@keyframes gridPulse {
+  0%, 100% { opacity: 0.03; }
+  50% { opacity: 0.06; }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-10px); }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes glow-breathe {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.8; }
+}
+
+.animated-grid {
+  background-image:
+    linear-gradient(rgba(99, 102, 241, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(99, 102, 241, 0.04) 1px, transparent 1px);
+  background-size: 60px 60px;
+  animation: gridPulse 8s ease-in-out infinite;
+}
+
+.hero-glow {
+  position: absolute;
+  width: 600px;
+  height: 600px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(99, 102, 241, 0.12) 0%, transparent 70%);
+  filter: blur(80px);
+  pointer-events: none;
+  animation: glow-breathe 6s ease-in-out infinite;
+}
+
+.shimmer-line {
+  background: linear-gradient(90deg, transparent, rgba(99,102,241,0.08), transparent);
+  background-size: 200% 100%;
+  animation: shimmer 8s ease-in-out infinite;
 }
 
 /* Smooth scroll */
