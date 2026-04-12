@@ -17,11 +17,35 @@ type FixApiError = {
 function parseGeminiStructured(text: string): Omit<FixApiSuccess, "success" | "provider"> {
   // Extract answer before confidence line
   const answerText = text.split("Confidence:")[0]?.trim() ?? "";
-  const answer = answerText
+  let answer = answerText
     .split(/\n{2,}/)
     .map((p) => p.trim())
     .filter(Boolean)
     .join("\n\n");
+
+  // Post-process to trim repetition and filler
+  answer = answer
+    .replace(/\s+/g, " ") // Normalize whitespace
+    .replace(/\.+/g, ".") // Remove multiple periods
+    .replace(/\s+\./g, ".") // Remove spaces before periods
+    .replace(/\.\s*\./g, ".") // Remove consecutive periods
+    .replace(/\b(the|a|an)\s+/gi, " ") // Remove common filler words (optional, keep minimal)
+    .replace(/\b(in order to|in order for)\b/gi, "to") // Simplify phrases
+    .replace(/\b(due to the fact that)\b/gi, "because") // Simplify phrases
+    .replace(/\b(at this point in time)\b/gi, "now") // Simplify phrases
+    .replace(/\b(in the event that)\b/gi, "if") // Simplify phrases
+    .replace(/\b(it is important to note that)\b/gi, "") // Remove filler
+    .replace(/\b(it should be noted that)\b/gi, "") // Remove filler
+    .replace(/\b(please note that)\b/gi, "") // Remove filler
+    .replace(/\b(additionally|furthermore|moreover)\b/gi, "") // Remove filler transitions
+    .replace(/\b(in addition|also|as well)\b/gi, "") // Remove filler transitions
+    .trim();
+
+  // Limit to reasonable length (approx 3-4 sentences)
+  const sentences = answer.split(". ").filter(Boolean);
+  if (sentences.length > 4) {
+    answer = sentences.slice(0, 4).join(". ") + ".";
+  }
 
   const confidenceRaw = text.split("Confidence:")[1]?.trim() ?? "";
   let confidence = Number.parseInt(confidenceRaw, 10);
@@ -59,27 +83,29 @@ Analyze the following issue:
 
 ${input}
 
-Provide a single, clean, actionable answer that:
+Provide a concise answer in 2 to 4 short sentences that:
 - explains the root cause clearly
-- recommends specific fixes
-- describes the expected outcome
+- recommends the most important fix action
+- describes the likely expected result
 
 Return EXACTLY in this format:
 
-<Your complete analysis and recommendations here>
+<Your concise 2-4 sentence answer>
 
 Confidence:
 <number between 70–95>
 
 Rules:
-- concise but valuable
-- highly readable
-- technically credible
-- no fluff
-- no robotic repetition
-- no section headers
-- premium tone: calm confidence, trustworthy
-- write as if speaking directly to a colleague
+- Maximum 2 to 4 sentences total
+- Practical diagnosis only
+- Most important fix action
+- Likely expected result
+- No long explanations
+- No theory
+- No repetition
+- No filler
+- Senior engineer tone: calm, confident
+- Write as if speaking directly to a colleague who needs quick guidance
 `;
 
     const tryGemini = async (): Promise<FixApiSuccess> => {
