@@ -1,3 +1,5 @@
+import { logs } from '@opentelemetry/api-logs';
+
 type ProviderName = "gemini" | "deepseek" | "mistral" | "openrouter";
 
 type FixApiSuccess = {
@@ -992,6 +994,35 @@ function buildSuccessResponse(output: string, provider: ProviderName, confidence
 
 export async function POST(req: Request) {
   try {
+    console.log('[OTEL API] POST request received');
+
+    // Explicit test log emission
+    const logger = logs.getLogger('kintifycloud');
+    console.log('[OTEL API] Logger obtained:', logger);
+    
+    const logRecord = {
+      severityText: 'INFO',
+      body: 'OpenTelemetry test log - Grafana Cloud integration verified',
+      attributes: {
+        'service.name': 'kintifycloud',
+        'service.version': '0.1.0',
+        'test.log': 'true',
+        'api.route': '/api/fix',
+      },
+    };
+    
+    console.log('[OTEL API] Emitting log record:', logRecord);
+    logger.emit(logRecord);
+    console.log('[OTEL API] Log emitted successfully');
+
+    // Force flush to ensure logs are sent immediately
+    const loggerProvider = (logger as { provider?: { forceFlush?: () => Promise<void> } }).provider;
+    if (loggerProvider && typeof loggerProvider.forceFlush === 'function') {
+      console.log('[OTEL API] Force flushing logger provider...');
+      await loggerProvider.forceFlush();
+      console.log('[OTEL API] Force flush completed');
+    }
+
     const body = await req.json();
     const input = body.input?.trim();
     const threadContext = parseThreadContext(body.thread);
