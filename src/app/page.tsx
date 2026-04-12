@@ -2,7 +2,7 @@
 /* eslint-disable @next/next/no-html-link-for-pages */
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Script from "next/script";
 import {
