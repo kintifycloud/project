@@ -57,9 +57,6 @@ const Navbar = () => {
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
           <a href="/" className="flex items-center gap-2 group">
-            <div className="w-7 h-7 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center group-hover:shadow-lg group-hover:shadow-indigo-500/20 transition-shadow">
-              <Zap className="w-4 h-4 text-white" />
-            </div>
             <span className="text-lg font-semibold tracking-tight">
               <span className="bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">Kintify</span>
               <span className="font-normal text-zinc-400"> Cloud</span>
@@ -1466,10 +1463,7 @@ const Footer = () => {
               <div className="w-7 h-7 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center">
                 <Zap className="w-4 h-4 text-white" />
               </div>
-              <span className="text-lg font-semibold tracking-tight">
-                <span className="bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">Kintify</span>
-                <span className="font-normal text-zinc-400"> Cloud</span>
-              </span>
+              <span className="text-xl font-semibold tracking-tight text-white">Kintify</span>
             </div>
             <p className="text-zinc-500 text-sm max-w-xs leading-relaxed mb-6">
               Turn unknown system behavior into instant, verifiable truth. Built for teams who ship.
