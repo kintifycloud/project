@@ -94,28 +94,27 @@ Rules:
         throw new Error("Gemini not configured");
       }
 
+      // Use only current, supported models
       const modelIds = [
-        "gemini-2.0-flash",
-        "gemini-2.0-flash-lite",
-        "gemini-1.5-flash",
-        "gemini-1.5-flash-002",
-        "gemini-1.5-flash-001",
+        "gemini-2.5-flash", // Primary recommended model
+        "gemini-2.0-flash-lite", // Fallback
       ];
 
+      // Prioritize v1beta endpoint for latest model support
       const apiVersions = ["v1beta", "v1"];
 
       let lastError: FixApiError | null = null;
 
       for (const modelId of modelIds) {
         for (const apiVersion of apiVersions) {
-          const res = await fetch(
-            "https://generativelanguage.googleapis.com/" +
-              apiVersion +
-              "/models/" +
-              modelId +
-              ":generateContent?key=" +
-              process.env.GEMINI_API_KEY,
-            {
+          const endpoint = `https://generativelanguage.googleapis.com/${apiVersion}/models/${modelId}:generateContent?key=${process.env.GEMINI_API_KEY}`;
+
+          // Debug logging
+          console.log(`[Gemini Debug] Attempting model: ${modelId}, version: ${apiVersion}, endpoint: ${endpoint}`);
+
+          let res: Response;
+          try {
+            res = await fetch(endpoint, {
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
@@ -127,17 +126,34 @@ Rules:
                   },
                 ],
               }),
-            },
-          );
+            });
+          } catch (fetchErr) {
+            console.log(`[Gemini Debug] Fetch error for ${modelId}/${apiVersion}:`, fetchErr instanceof Error ? fetchErr.message : String(fetchErr));
+            lastError = {
+              success: false,
+              provider: "gemini",
+              error: "Network error connecting to Gemini API",
+              upstreamStatus: 0,
+            };
+            continue;
+          }
 
           const raw = await res.text();
+          console.log(`[Gemini Debug] Response status: ${res.status} for ${modelId}/${apiVersion}`);
+
           const data = (() => {
             try {
               return JSON.parse(raw);
             } catch {
+              console.log(`[Gemini Debug] Failed to parse response as JSON for ${modelId}/${apiVersion}`);
               return null;
             }
           })();
+
+          // Debug log error details if present
+          if (data?.error) {
+            console.log(`[Gemini Debug] API error for ${modelId}/${apiVersion}:`, data.error);
+          }
 
           const text: string =
             data?.candidates?.[0]?.content?.parts?.[0]?.text ?
@@ -149,19 +165,30 @@ Rules:
             const upstreamMessage =
               typeof data?.error?.message === "string" ? data.error.message : undefined;
 
+            // Handle specific error cases
+            let errorMessage = "Failed to analyze issue. Please try again.";
+            if (upstreamMessage) {
+              if (upstreamMessage.includes("API key")) {
+                errorMessage = "Invalid API key configuration";
+              } else if (upstreamMessage.includes("quota") || upstreamMessage.includes("rate limit")) {
+                errorMessage = "API rate limit exceeded";
+              } else if (upstreamMessage.includes("timeout")) {
+                errorMessage = "Request timeout";
+              } else {
+                errorMessage = `Gemini error: ${upstreamMessage}`;
+              }
+            }
+
             lastError = {
               success: false,
               provider: "gemini",
-              error:
-                upstreamMessage ?
-                  `Gemini error: ${upstreamMessage}`
-                :
-                  "Failed to analyze issue. Please try again.",
+              error: errorMessage,
               upstreamStatus: res.status,
             };
             continue;
           }
 
+          console.log(`[Gemini Debug] Successfully generated response from ${modelId}/${apiVersion}`);
           const parsed = parseGeminiStructured(text);
           return {
             success: true,
@@ -176,7 +203,7 @@ Rules:
           ({
             success: false,
             provider: "gemini",
-            error: "Failed to analyze issue. Please try again.",
+            error: "Unable to analyze issue right now.",
           } satisfies FixApiError),
       );
     };
