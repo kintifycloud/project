@@ -8,19 +8,7 @@ import { FixLoader } from "@/components/FixLoader";
 
 type FixApiSuccess = {
   success: true;
-  deepPatternReasoning: string;
-  ethicalLogicalIntelligence: string;
-  strategicDecisionEngine: string[];
-  predictiveModeling: string;
-  efficiencyOptimization: string;
-  confidence: number;
-};
-
-// Simple frontend display mapping
-type SimpleFixDisplay = {
-  rootCause: string;
-  recommendedFix: string[];
-  expectedOutcome: string;
+  answer: string;
   confidence: number;
 };
 
@@ -37,89 +25,43 @@ export default function FixPage() {
   const [result, setResult] = useState<FixApiSuccess | null>(null);
   const [error, setError] = useState("");
 
-  // Progressive reveal states (simple user-friendly names)
-  const [revealedRootCause, setRevealedRootCause] = useState("");
-  const [revealedRecommendedFix, setRevealedRecommendedFix] = useState<string[]>([]);
-  const [revealedExpectedOutcome, setRevealedExpectedOutcome] = useState("");
-  const [visibleCards, setVisibleCards] = useState<Set<"rootCause" | "recommendedFix" | "expectedOutcome" | "confidence">>(new Set());
-  const [isTypingRootCause, setIsTypingRootCause] = useState(false);
-  const [isTypingExpectedOutcome, setIsTypingExpectedOutcome] = useState(false);
+  // Progressive reveal states for single answer
+  const [revealedAnswer, setRevealedAnswer] = useState("");
+  const [visibleCards, setVisibleCards] = useState<Set<"answer" | "confidence">>(new Set());
+  const [isTypingAnswer, setIsTypingAnswer] = useState(false);
 
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
-  // Map complex backend response to simple frontend display
-  const mapToSimpleDisplay = (backend: FixApiSuccess): SimpleFixDisplay => {
-    return {
-      rootCause: backend.deepPatternReasoning,
-      recommendedFix: backend.strategicDecisionEngine,
-      expectedOutcome: backend.predictiveModeling,
-      confidence: backend.confidence,
-    };
-  };
-
-  // Typewriter effect for text
+  // Typewriter effect for single answer
   useEffect(() => {
     if (result) {
-      const simpleDisplay = mapToSimpleDisplay(result);
-
       // Reset reveal states
-      setRevealedRootCause("");
-      setRevealedRecommendedFix([]);
-      setRevealedExpectedOutcome("");
+      setRevealedAnswer("");
       setVisibleCards(new Set());
-      setIsTypingRootCause(false);
-      setIsTypingExpectedOutcome(false);
+      setIsTypingAnswer(false);
 
       const intervals: NodeJS.Timeout[] = [];
 
       // Progressive card reveal
       const revealSequence = async () => {
-        // Reveal Root Cause first
+        // Reveal answer
         await new Promise(resolve => setTimeout(resolve, 100));
-        setVisibleCards(prev => new Set([...prev, "rootCause"]));
+        setVisibleCards(prev => new Set([...prev, "answer"]));
 
-        // Typewriter effect for Root Cause
-        const rootCauseText = simpleDisplay.rootCause;
-        let rootCauseIndex = 0;
-        setIsTypingRootCause(true);
-        const rootCauseInterval = setInterval(() => {
-          if (rootCauseIndex < rootCauseText.length) {
-            setRevealedRootCause(rootCauseText.slice(0, rootCauseIndex + 1));
-            rootCauseIndex++;
+        // Typewriter effect for answer
+        const answerText = result.answer;
+        let answerIndex = 0;
+        setIsTypingAnswer(true);
+        const answerInterval = setInterval(() => {
+          if (answerIndex < answerText.length) {
+            setRevealedAnswer(answerText.slice(0, answerIndex + 1));
+            answerIndex++;
           } else {
-            clearInterval(rootCauseInterval);
-            setIsTypingRootCause(false);
+            clearInterval(answerInterval);
+            setIsTypingAnswer(false);
           }
         }, 15);
-        intervals.push(rootCauseInterval);
-
-        await new Promise(resolve => setTimeout(resolve, 800));
-        setVisibleCards(prev => new Set([...prev, "recommendedFix"]));
-
-        // Progressive reveal for Recommended Fix steps
-        const recommendedFixSteps = simpleDisplay.recommendedFix;
-        for (let i = 0; i < recommendedFixSteps.length; i++) {
-          await new Promise(resolve => setTimeout(resolve, 300));
-          setRevealedRecommendedFix(prev => [...prev, recommendedFixSteps[i] as string]);
-        }
-
-        await new Promise(resolve => setTimeout(resolve, 500));
-        setVisibleCards(prev => new Set([...prev, "expectedOutcome"]));
-
-        // Typewriter effect for Expected Outcome
-        const expectedOutcomeText = simpleDisplay.expectedOutcome;
-        let expectedOutcomeIndex = 0;
-        setIsTypingExpectedOutcome(true);
-        const expectedOutcomeInterval = setInterval(() => {
-          if (expectedOutcomeIndex < expectedOutcomeText.length) {
-            setRevealedExpectedOutcome(expectedOutcomeText.slice(0, expectedOutcomeIndex + 1));
-            expectedOutcomeIndex++;
-          } else {
-            clearInterval(expectedOutcomeInterval);
-            setIsTypingExpectedOutcome(false);
-          }
-        }, 15);
-        intervals.push(expectedOutcomeInterval);
+        intervals.push(answerInterval);
 
         await new Promise(resolve => setTimeout(resolve, 600));
         setVisibleCards(prev => new Set([...prev, "confidence"]));
@@ -135,11 +77,12 @@ export default function FixPage() {
 
   const samplePrompts = useMemo(
     () => [
-      "Kubernetes pod crash loop",
-      "API latency spike",
-      "SSL certificate issue",
-      "Docker container failing",
-      "Database timeout",
+      "Kubernetes pods stuck in CrashLoopBackOff",
+      "Database connections timing out under load",
+      "API p95 latency increased after deploy",
+      "SSL handshake failed on production domain",
+      "High CPU usage causing service slowdown",
+      "Intermittent 502 errors behind load balancer",
     ],
     [],
   );
@@ -210,21 +153,26 @@ export default function FixPage() {
               className="w-full min-h-[140px] resize-none rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-zinc-700 focus:ring-2 focus:ring-indigo-500/20"
             />
 
-            <div className="mt-4 flex flex-wrap gap-2">
-              {samplePrompts.map((prompt) => (
-                <button
-                  key={prompt}
-                  type="button"
-                  onClick={() => {
-                    setInput(prompt);
-                    setError("");
-                    textareaRef.current?.focus();
-                  }}
-                  className="rounded-full border border-zinc-800 bg-zinc-950 px-3 py-1.5 text-xs text-zinc-300 transition-colors hover:border-zinc-700 hover:text-white"
-                >
-                  {prompt}
-                </button>
-              ))}
+            <div className="mt-4">
+              <p className="mb-3 text-xs text-zinc-500">Try a sample issue</p>
+              <div className="flex flex-wrap gap-2">
+                {samplePrompts.map((prompt) => (
+                  <motion.button
+                    key={prompt}
+                    type="button"
+                    onClick={() => {
+                      setInput(prompt);
+                      setError("");
+                      textareaRef.current?.focus();
+                    }}
+                    whileHover={{ y: -2 }}
+                    whileTap={{ scale: 0.98 }}
+                    className="rounded-full border border-zinc-800/80 bg-zinc-950/50 px-4 py-2 text-xs text-zinc-300 transition-all duration-200 hover:border-indigo-500/50 hover:bg-indigo-500/10 hover:text-zinc-100 hover:shadow-[0_0_20px_rgba(99,102,241,0.15)] active:scale-95"
+                  >
+                    {prompt}
+                  </motion.button>
+                ))}
+              </div>
             </div>
 
             <div className="mt-6">
@@ -295,71 +243,17 @@ export default function FixPage() {
                 ) : (
                   <div className="space-y-5 text-sm text-zinc-200">
                     <AnimatePresence>
-                      {visibleCards.has("rootCause") && (
+                      {visibleCards.has("answer") && (
                         <motion.div
                           initial={{ opacity: 0, y: 10 }}
                           animate={{ opacity: 1, y: 0 }}
                           transition={{ duration: 0.3, ease: "easeOut" }}
-                          className="grid gap-2"
+                          className="leading-relaxed text-zinc-100"
                         >
-                          <div className="text-xs font-medium tracking-wide text-zinc-400">
-                            Root Cause
-                          </div>
-                          <div className="leading-relaxed text-zinc-100">
-                            {revealedRootCause}
-                            {isTypingRootCause && (
-                              <span className="inline-block w-2 h-4 bg-indigo-400 ml-1 animate-pulse" />
-                            )}
-                          </div>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-
-                    <AnimatePresence>
-                      {visibleCards.has("recommendedFix") && (
-                        <motion.div
-                          initial={{ opacity: 0, y: 10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ duration: 0.3, ease: "easeOut" }}
-                          className="grid gap-2"
-                        >
-                          <div className="text-xs font-medium tracking-wide text-zinc-400">
-                            Recommended Fix
-                          </div>
-                          <ol className="list-decimal space-y-1 pl-5 text-zinc-100">
-                            {revealedRecommendedFix.map((step, idx) => (
-                              <motion.li
-                                key={`${idx}-${step}`}
-                                initial={{ opacity: 0, x: -10 }}
-                                animate={{ opacity: 1, x: 0 }}
-                                transition={{ duration: 0.2, ease: "easeOut" }}
-                                className="leading-relaxed"
-                              >
-                                {step}
-                              </motion.li>
-                            ))}
-                          </ol>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-
-                    <AnimatePresence>
-                      {visibleCards.has("expectedOutcome") && (
-                        <motion.div
-                          initial={{ opacity: 0, y: 10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ duration: 0.3, ease: "easeOut" }}
-                          className="grid gap-2"
-                        >
-                          <div className="text-xs font-medium tracking-wide text-zinc-400">
-                            Expected Outcome
-                          </div>
-                          <div className="leading-relaxed text-zinc-100">
-                            {revealedExpectedOutcome}
-                            {isTypingExpectedOutcome && (
-                              <span className="inline-block w-2 h-4 bg-indigo-400 ml-1 animate-pulse" />
-                            )}
-                          </div>
+                          {revealedAnswer}
+                          {isTypingAnswer && (
+                            <span className="inline-block w-2 h-4 bg-indigo-400 ml-1 animate-pulse" />
+                          )}
                         </motion.div>
                       )}
                     </AnimatePresence>
