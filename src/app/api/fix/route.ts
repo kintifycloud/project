@@ -1,4 +1,5 @@
 import { logs } from '@opentelemetry/api-logs';
+import '../../../lib/otel-init';
 
 type ProviderName = "gemini" | "deepseek" | "mistral" | "openrouter";
 
@@ -999,6 +1000,8 @@ export async function POST(req: Request) {
     // Explicit test log emission
     const logger = logs.getLogger('kintifycloud');
     console.log('[OTEL API] Logger obtained:', logger);
+    console.log('[OTEL API] Logger type:', logger.constructor.name);
+    console.log('[OTEL API] Logger provider:', (logger as { provider?: { constructor?: { name?: string } } }).provider?.constructor?.name);
     
     const logRecord = {
       severityText: 'INFO',
@@ -1021,6 +1024,8 @@ export async function POST(req: Request) {
       console.log('[OTEL API] Force flushing logger provider...');
       await loggerProvider.forceFlush();
       console.log('[OTEL API] Force flush completed');
+    } else {
+      console.warn('[OTEL API] Logger provider or forceFlush not available');
     }
 
     const body = await req.json();

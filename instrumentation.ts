@@ -42,60 +42,6 @@ console.log('[OTEL] Parsed headers:', Object.keys(parsedHeaders));
 const logsUrl = otlpEndpoint.endsWith('/v1/logs') ? otlpEndpoint : `${otlpEndpoint}/v1/logs`;
 console.log('[OTEL] Logs export URL:', logsUrl);
 
-// Configure OTLP Log Exporter with debug logging
-const logExporter = new OTLPLogExporter({
-  url: logsUrl,
-  headers: parsedHeaders,
-});
-
-// Add debug logging to the exporter
-const originalExport = logExporter.export;
-logExporter.export = async function(...args: any[]) {
-  console.log('[OTEL Exporter] Exporting logs...');
-  try {
-    const result = await originalExport.apply(logExporter, args as any);
-    console.log('[OTEL Exporter] Export successful');
-    return result;
-  } catch (error) {
-    console.error('[OTEL Exporter] Export failed:', error);
-    throw error;
-  }
-} as any;
-
-const originalShutdown = logExporter.shutdown;
-logExporter.shutdown = async function(...args: any[]) {
-  console.log('[OTEL Exporter] Shutting down exporter');
-  try {
-    const result = await originalShutdown.apply(logExporter, args as any);
-    console.log('[OTEL Exporter] Shutdown successful');
-    return result;
-  } catch (error) {
-    console.error('[OTEL Exporter] Shutdown failed:', error);
-    throw error;
-  }
-} as any;
-
-const originalForceFlush = logExporter.forceFlush;
-logExporter.forceFlush = async function(...args: any[]) {
-  console.log('[OTEL Exporter] Force flushing logs...');
-  try {
-    const result = await originalForceFlush.apply(logExporter, args as any);
-    console.log('[OTEL Exporter] Force flush successful');
-    return result;
-  } catch (error) {
-    console.error('[OTEL Exporter] Force flush failed:', error);
-    throw error;
-  }
-} as any;
-
-// Configure Logger Provider with resource attributes
-const loggerProvider = new LoggerProvider();
-
-(loggerProvider as any).addLogRecordProcessor(new SimpleLogRecordProcessor(logExporter));
-logs.setGlobalLoggerProvider(loggerProvider);
-
-console.log('[OTEL] Logger provider configured with OTLP exporter');
-
 // Initialize the SDK with auto-instrumentations
 const sdk = new NodeSDK({
   instrumentations: [getNodeAutoInstrumentations()],
@@ -106,8 +52,73 @@ export async function register() {
   console.log('OTEL started - register() function called');
   
   try {
+    // Start the SDK first
     await sdk.start();
     console.log('OTEL started - SDK started successfully');
+    
+    // Configure OTLP Log Exporter with debug logging
+    const logExporter = new OTLPLogExporter({
+      url: logsUrl,
+      headers: parsedHeaders,
+    });
+    
+    // Add debug logging to the exporter
+    const originalExport = logExporter.export;
+    logExporter.export = async function(...args: any[]) {
+      console.log('[OTEL Exporter] Exporting logs...');
+      try {
+        const result = await originalExport.apply(logExporter, args as any);
+        console.log('[OTEL Exporter] Export successful');
+        return result;
+      } catch (error) {
+        console.error('[OTEL Exporter] Export failed:', error);
+        throw error;
+      }
+    } as any;
+    
+    const originalForceFlush = logExporter.forceFlush;
+    logExporter.forceFlush = async function(...args: any[]) {
+      console.log('[OTEL Exporter] Force flushing logs...');
+      try {
+        const result = await originalForceFlush.apply(logExporter, args as any);
+        console.log('[OTEL Exporter] Force flush successful');
+        return result;
+      } catch (error) {
+        console.error('[OTEL Exporter] Force flush failed:', error);
+        throw error;
+      }
+    } as any;
+    
+    // Configure Logger Provider with resource attributes
+    const loggerProvider = new LoggerProvider();
+    
+    (loggerProvider as any).addLogRecordProcessor(new SimpleLogRecordProcessor(logExporter));
+    
+    // Set global logger provider AFTER SDK starts
+    logs.setGlobalLoggerProvider(loggerProvider);
+    console.log('[OTEL] Global logger provider registered successfully');
+    
+    // Verify the logger is not a ProxyLogger
+    const testLogger = logs.getLogger('kintifycloud');
+    console.log('[OTEL] Test logger type:', testLogger.constructor.name);
+    console.log('[OTEL] Test logger provider:', (testLogger as any).provider?.constructor.name);
+    
+    // Emit a startup log to verify connection
+    testLogger.emit({
+      severityText: 'INFO',
+      body: 'OpenTelemetry instrumentation initialized successfully with real logger provider',
+      attributes: {
+        'service.name': 'kintifycloud',
+        'service.version': '0.1.0',
+        'startup.log': 'true',
+      },
+    });
+    console.log('[OTEL] Startup log emitted, force flushing...');
+    
+    // Force flush to ensure startup log is sent
+    await loggerProvider.forceFlush();
+    console.log('[OTEL] Startup log flushed successfully');
+    
   } catch (error) {
     console.error('OTEL started - Failed to start SDK:', error);
   }
