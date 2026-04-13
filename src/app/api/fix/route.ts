@@ -1,5 +1,6 @@
 import { logs } from '@opentelemetry/api-logs';
 import '../../../lib/otel-init';
+import { supabase } from '../../../lib/supabase';
 
 type ProviderName = "gemini" | "deepseek" | "mistral" | "openrouter";
 
@@ -976,6 +977,31 @@ async function callOpenRouter(input: string, threadContext?: FixThreadContext | 
   );
 }
 
+async function saveFixHistory(userInput: string, aiOutput: string, provider: ProviderName): Promise<void> {
+  if (!supabase) {
+    console.warn('[Supabase] Fix history not saved - client not initialized');
+    return;
+  }
+
+  try {
+    const { error } = await supabase
+      .from('fix_history')
+      .insert({
+        user_input: userInput,
+        ai_output: aiOutput,
+        provider: provider,
+      });
+
+    if (error) {
+      console.error('[Supabase] Failed to save fix history:', error);
+    } else {
+      console.log('[Supabase] Fix history saved');
+    }
+  } catch (error) {
+    console.error('[Supabase] Error saving fix history:', error);
+  }
+}
+
 function buildSuccessResponse(output: string, provider: ProviderName, confidence: number | undefined, input: string, threadContext?: FixThreadContext | null) {
   const text = applyIntentAwarePolish(output, input, threadContext);
 
@@ -1055,6 +1081,7 @@ export async function POST(req: Request) {
     // Check for fast path responses first
     const fastPathResponse = threadContext?.isFollowUp ? null : getFastPathResponse(input);
     if (fastPathResponse) {
+      saveFixHistory(input, fastPathResponse, "gemini");
       return buildSuccessResponse(fastPathResponse, "gemini", 85, input, threadContext);
     }
 
@@ -1065,6 +1092,7 @@ export async function POST(req: Request) {
       try {
         const result = await callProvider(input, threadContext);
         console.log(`[Fix API] Using provider ${result.provider}`);
+        saveFixHistory(input, result.output, result.provider);
         return buildSuccessResponse(result.output, result.provider, result.confidence, input, threadContext);
       } catch (error) {
         const providerError = error as ProviderException;
