@@ -47,8 +47,6 @@ function toAnalysisResult(entry: SeoEntry): AnalysisResult {
   };
 }
 
-const currentYear = new Date().getFullYear();
-
 function categoryLabel(cat: string): string {
   const map: Record<string, string> = {
     performance: "Performance",
@@ -143,7 +141,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
   if (!entry) return { title: "Not Found" };
 
-  const pageTitle = `${entry.title} in ${currentYear} | Kintify Cloud Optimization Guide`;
+  const pageTitle = `${entry.title} | Kintify`;
   const pageUrl = `/fix/${entry.category}/${entry.issue}`;
 
   return {

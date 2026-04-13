@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import type { Route } from "next";
 import type { ReactNode } from "react";
 import { motion } from "framer-motion";
 import { ArrowRight, CloudCog, ShieldCheck, Sparkles, Zap } from "lucide-react";
@@ -40,21 +39,15 @@ export function Hero({ children }: { children?: ReactNode }) {
           </Link>
           <nav className="hidden items-center gap-6 text-sm text-slate-300 md:flex">
             <Link href="/fix">Fix</Link>
-            <Link href={"/trace" as Route}>Trace</Link>
-            <Link href={"/why" as Route}>Why</Link>
-            <Link href={"/verify" as Route}>Verify</Link>
-            <Link href={"/flow" as Route}>Flow</Link>
-            <Link href={"/live" as Route}>Live</Link>
-            <Link href={"/trust" as Route}>Trust</Link>
-            <Link href={"/guarantee" as Route}>Guarantee</Link>
-            <Link href="#how-it-works">How it works</Link>
-            <Link href="#proofs">Proofs</Link>
-            <Link href="#features">Features</Link>
-            <Link href="#faq">FAQ</Link>
+            <Link href="/blog">Blog</Link>
+            <Link href="/api-docs">API Docs</Link>
+            <Link href="/pricing">Pricing</Link>
+            <Link href="/about">About</Link>
+            <Link href="/contact">Contact</Link>
           </nav>
           <Button asChild size="sm" variant="outline">
-            <Link href="#proofs">
-              Explore proofs
+            <Link href="/api-docs">
+              View API docs
               <ArrowRight className="h-4 w-4" />
             </Link>
           </Button>

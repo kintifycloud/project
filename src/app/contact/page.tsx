@@ -232,19 +232,19 @@ export default function ContactPage() {
                 <h3 className="font-semibold mb-4 text-base sm:text-lg">Follow Us</h3>
                 <div className="flex gap-4">
                   <a
-                    href="#"
+                    href="https://github.com/kintifycloud"
                     className="w-10 h-10 sm:w-12 sm:h-12 bg-[#111117] rounded-lg border border-white/10 flex items-center justify-center text-gray-400 hover:text-white hover:border-white/20 transition-colors"
                   >
                     <Github className="w-5 h-5" />
                   </a>
                   <a
-                    href="#"
+                    href="https://x.com/cloudkintify"
                     className="w-10 h-10 sm:w-12 sm:h-12 bg-[#111117] rounded-lg border border-white/10 flex items-center justify-center text-gray-400 hover:text-white hover:border-white/20 transition-colors"
                   >
                     <Twitter className="w-5 h-5" />
                   </a>
                   <a
-                    href="#"
+                    href="mailto:hello@kintify.cloud"
                     className="w-10 h-10 sm:w-12 sm:h-12 bg-[#111117] rounded-lg border border-white/10 flex items-center justify-center text-gray-400 hover:text-white hover:border-white/20 transition-colors"
                   >
                     <Linkedin className="w-5 h-5" />

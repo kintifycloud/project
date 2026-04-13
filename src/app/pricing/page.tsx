@@ -176,7 +176,7 @@ export default function PricingPage() {
                 </div>
 
                 <Link
-                  href={plan.name === "Enterprise" ? "#" : "/fix"}
+                  href={plan.name === "Enterprise" ? "/contact" : "/fix"}
                   className={`block w-full text-center py-3 px-4 rounded-xl font-medium transition-colors mb-6 ${
                     plan.popular
                       ? "bg-indigo-500 hover:bg-indigo-600 text-white"
@@ -254,7 +254,7 @@ export default function PricingPage() {
               Our team is here to help you find the perfect solution for your needs.
             </p>
             <Link
-              href="#"
+              href="/contact"
               className="inline-flex items-center gap-2 bg-indigo-500 hover:bg-indigo-600 text-white px-6 sm:px-8 py-3 sm:py-4 rounded-xl font-medium transition-colors text-sm sm:text-base"
             >
               Talk to Sales

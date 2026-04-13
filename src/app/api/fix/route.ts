@@ -1,6 +1,10 @@
 import { logs } from '@opentelemetry/api-logs';
 import '../../../lib/otel-init';
 import { supabase } from '../../../lib/supabase';
+import { classifyIssue, type IssueClassification } from '@/lib/classifier';
+import { routeFixDecision } from '@/lib/llmRouter';
+import { VAGUE_INPUT_DECISION, serializeDecision, toStrictDecision, type FixDecision } from '@/lib/normalize';
+import { assertHighQuality } from '@/lib/qualityCheck';
 
 type ProviderName = "gemini" | "deepseek" | "mistral" | "openrouter";
 
@@ -12,7 +16,7 @@ type FixApiSuccess = {
   provider: ProviderName;
 };
 
-type FixApiError = {
+export type FixApiError = {
   success: false;
   error: string;
   provider?: ProviderName;
@@ -44,6 +48,104 @@ type FixThreadContext = {
   recentMessages: FixThreadTurn[];
   isFollowUp: boolean;
 };
+
+const FIX_RATE_LIMIT_MAX_REQUESTS = 5;
+const FIX_RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
+const fixRateLimitStore = new Map<string, { count: number; resetAt: number }>();
+
+function getClientIp(request: Request): string {
+  const forwardedFor = request.headers.get('x-forwarded-for');
+
+  if (forwardedFor) {
+    return forwardedFor.split(',')[0]?.trim() || 'unknown';
+  }
+
+  return request.headers.get('x-real-ip')?.trim() || 'unknown';
+}
+
+function getRateLimitResponse(request: Request): Response | null {
+  const ip = getClientIp(request);
+  const now = Date.now();
+  const current = fixRateLimitStore.get(ip);
+
+  if (!current || current.resetAt <= now) {
+    fixRateLimitStore.set(ip, {
+      count: 1,
+      resetAt: now + FIX_RATE_LIMIT_WINDOW_MS,
+    });
+
+    return null;
+  }
+
+  if (current.count >= FIX_RATE_LIMIT_MAX_REQUESTS) {
+    return Response.json({
+      error: 'Free limit reached',
+    }, {
+      status: 429,
+      headers: {
+        'Retry-After': String(Math.max(Math.ceil((current.resetAt - now) / 1000), 1)),
+      },
+    });
+  }
+
+  current.count += 1;
+  fixRateLimitStore.set(ip, current);
+  return null;
+}
+
+function buildDecisionSummary(decision: FixDecision): string {
+  return [
+    `Action: ${decision.action}`,
+    `Confidence: ${decision.confidence}`,
+    `Blast Radius: ${decision.blastRadius}`,
+    `Safety: ${decision.safety}`,
+  ].join('\n');
+}
+
+function buildEmergencyDecision(classification: IssueClassification): FixDecision {
+  if (classification === 'api') {
+    return {
+      action: 'Rollback the most recent service deploy or shift traffic to the last stable version before deeper debugging',
+      confidence: '82',
+      blastRadius: 'service',
+      safety: 'Confirm the last healthy release target is available before rollback or traffic shift',
+    };
+  }
+
+  if (classification === 'kubernetes') {
+    return {
+      action: 'Pause the rollout and inspect the last terminated pod before applying more cluster changes',
+      confidence: '80',
+      blastRadius: 'pod',
+      safety: 'Keep the previous ReplicaSet ready so you can undo the rollout immediately',
+    };
+  }
+
+  if (classification === 'docker') {
+    return {
+      action: 'Stop restart churn and compare the running image and environment against the last healthy container',
+      confidence: '78',
+      blastRadius: 'pod',
+      safety: 'Preserve the last known good image tag and container config before replacing it',
+    };
+  }
+
+  if (classification === 'infra') {
+    return {
+      action: 'Revert the most recent infrastructure or edge change before more traffic is affected',
+      confidence: '81',
+      blastRadius: 'infra',
+      safety: 'Verify a tested snapshot, prior config, or certificate bundle is ready before revert',
+    };
+  }
+
+  return {
+    action: 'Freeze recent changes and capture logs, errors, and deploy deltas from the failure window before acting',
+    confidence: '74',
+    blastRadius: 'unknown',
+    safety: 'Avoid new changes until you have a rollback target or backup snapshot ready',
+  };
+}
 
 function getFastPathResponse(input: string): string | null {
   const lowerInput = input.toLowerCase();
@@ -774,7 +876,7 @@ function validateProviderText(provider: ProviderName, text: string): string {
   return polished;
 }
 
-function logProviderConfiguration() {
+export function logProviderConfiguration() {
   const providerStates: Record<ProviderName, boolean> = {
     gemini: Boolean(getProviderApiKey("gemini")),
     deepseek: Boolean(getProviderApiKey("deepseek")),
@@ -881,7 +983,7 @@ async function callOpenAiCompatibleProvider(
   });
 }
 
-async function callGemini(input: string, threadContext?: FixThreadContext | null): Promise<FixApiSuccess> {
+export async function callGemini(input: string, threadContext?: FixThreadContext | null): Promise<FixApiSuccess> {
   if (!process.env.GEMINI_API_KEY) {
     throw createProviderException("gemini", "Gemini not configured");
   }
@@ -932,7 +1034,7 @@ async function callGemini(input: string, threadContext?: FixThreadContext | null
   });
 }
 
-async function callDeepSeek(input: string, threadContext?: FixThreadContext | null): Promise<FixApiSuccess> {
+export async function callDeepSeek(input: string, threadContext?: FixThreadContext | null): Promise<FixApiSuccess> {
   if (!process.env.DEEPSEEK_API_KEY) {
     throw createProviderException("deepseek", "DeepSeek not configured");
   }
@@ -947,7 +1049,7 @@ async function callDeepSeek(input: string, threadContext?: FixThreadContext | nu
   );
 }
 
-async function callMistral(input: string, threadContext?: FixThreadContext | null): Promise<FixApiSuccess> {
+export async function callMistral(input: string, threadContext?: FixThreadContext | null): Promise<FixApiSuccess> {
   if (!process.env.MISTRAL_API_KEY) {
     throw createProviderException("mistral", "Mistral not configured");
   }
@@ -962,7 +1064,7 @@ async function callMistral(input: string, threadContext?: FixThreadContext | nul
   );
 }
 
-async function callOpenRouter(input: string, threadContext?: FixThreadContext | null): Promise<FixApiSuccess> {
+export async function callOpenRouter(input: string, threadContext?: FixThreadContext | null): Promise<FixApiSuccess> {
   if (!process.env.OPENROUTER_API_KEY) {
     throw createProviderException("openrouter", "OpenRouter not configured");
   }
@@ -1002,7 +1104,7 @@ async function saveFixHistory(userInput: string, aiOutput: string, provider: Pro
   }
 }
 
-function buildSuccessResponse(output: string, provider: ProviderName, confidence: number | undefined, input: string, threadContext?: FixThreadContext | null) {
+export function buildSuccessResponse(output: string, provider: ProviderName, confidence: number | undefined, input: string, threadContext?: FixThreadContext | null) {
   const text = applyIntentAwarePolish(output, input, threadContext);
 
   return new Response(JSON.stringify({
@@ -1058,60 +1160,84 @@ export async function POST(req: Request) {
     const input = body.input?.trim();
     const threadContext = parseThreadContext(body.thread);
 
+    const rateLimitResponse = getRateLimitResponse(req);
+
+    if (rateLimitResponse) {
+      return rateLimitResponse;
+    }
+
     if (!input) {
       return Response.json({
-        success: false,
         error: "Input is required",
       }, { status: 400 });
     }
 
     if (!process.env.GEMINI_API_KEY && !process.env.DEEPSEEK_API_KEY && !process.env.MISTRAL_API_KEY && !process.env.OPENROUTER_API_KEY) {
       return Response.json({
-        success: false,
         error: "Server is not configured",
-      } satisfies FixApiError, { status: 500 });
+      }, { status: 500 });
     }
 
-    logProviderConfiguration();
-    console.log(`[Fix API] Intent ${detectIntentMode(input)}, environment ${detectEnvironment(input)}, severity ${detectIssueSeverity(input)}, urgency ${detectUserUrgency(input)}`);
+    const classification = await classifyIssue(input);
+    console.log(`[Fix API] Classification ${classification.type}: ${classification.reason}`);
     if (threadContext?.isFollowUp) {
       console.log(`[Fix API] Continuing issue thread${threadContext.sessionId ? ` ${threadContext.sessionId}` : ""} with ${threadContext.recentMessages.length} prior follow-up turns`);
     }
 
-    // Check for fast path responses first
-    const fastPathResponse = threadContext?.isFollowUp ? null : getFastPathResponse(input);
-    if (fastPathResponse) {
-      saveFixHistory(input, fastPathResponse, "gemini");
-      return buildSuccessResponse(fastPathResponse, "gemini", 85, input, threadContext);
+    if (classification.isVague) {
+      const decision = toStrictDecision(VAGUE_INPUT_DECISION);
+      saveFixHistory(input, serializeDecision(decision), "openrouter");
+      return Response.json(decision, {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Fix-Provider': 'fallback',
+          'X-Fix-Classification': classification.type,
+        },
+      });
     }
 
-    const providers = [callGemini, callDeepSeek, callMistral, callOpenRouter];
-    let lastError: ProviderException | null = null;
+    try {
+      const routed = await routeFixDecision(threadContext ? {
+        input,
+        classification: classification.type,
+        threadContext,
+      } : {
+        input,
+        classification: classification.type,
+      });
+      const decision = assertHighQuality(toStrictDecision(routed.decision));
 
-    for (const callProvider of providers) {
-      try {
-        const result = await callProvider(input, threadContext);
-        console.log(`[Fix API] Using provider ${result.provider}`);
-        saveFixHistory(input, result.output, result.provider);
-        return buildSuccessResponse(result.output, result.provider, result.confidence, input, threadContext);
-      } catch (error) {
-        const providerError = error as ProviderException;
-        console.log(`[Fix API] Falling back after ${providerError.provider}: ${providerError.message}`);
-        lastError = providerError;
-      }
+      console.log(`[Fix API] Using provider ${routed.provider}`);
+      saveFixHistory(input, serializeDecision(decision), routed.provider);
+
+      return Response.json(decision, {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Fix-Provider': routed.provider,
+          'X-Fix-Classification': classification.type,
+        },
+      });
+    } catch (error) {
+      const fallbackDecision = buildEmergencyDecision(classification.type);
+      const safeDecision = assertHighQuality(toStrictDecision(fallbackDecision));
+      const message = error instanceof Error ? error.message : String(error);
+
+      console.log(`[Fix API] Falling back to emergency decision: ${message}`);
+      saveFixHistory(input, buildDecisionSummary(safeDecision), 'openrouter');
+
+      return Response.json(safeDecision, {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Fix-Provider': 'fallback',
+          'X-Fix-Classification': classification.type,
+        },
+      });
     }
-
-    const payload: FixApiError = {
-      success: false,
-      error: lastError?.message ?? "Failed to analyze issue. Please try again.",
-      ...(lastError?.provider ? { provider: lastError.provider } : {}),
-      ...(typeof lastError?.upstreamStatus === "number" ? { upstreamStatus: lastError.upstreamStatus } : {}),
-    };
-
-    return Response.json(payload, { status: 502 });
    } catch {
      return Response.json({
-       success: false,
        error: "Failed to analyze issue. Please try again.",
     }, { status: 500 });
   }

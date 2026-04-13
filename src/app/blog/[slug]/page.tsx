@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
 import Link from "next/link";
+import { useParams } from "next/navigation";
 import {
   Calendar,
   Clock,
@@ -16,138 +17,16 @@ import {
   CheckCircle2,
 } from "lucide-react";
 
+import { findBlogPost, getRelatedBlogPosts } from "@/lib/blogPosts";
+
 export default function BlogArticlePage() {
   const [activeSection, setActiveSection] = useState("");
   const [scrollProgress, setScrollProgress] = useState(0);
-
-  // Sample article data - in production this would come from CMS or API
-  const article = {
-    id: 1,
-    title: "Introducing Verisig: Cryptographic Proofs for System Verification",
-    subtitle: "How our new verification layer provides mathematical certainty that your fixes actually work in production environments.",
-    author: "Alex Chen",
-    authorRole: "Lead Engineer",
-    date: "2024-01-15",
-    readTime: "8 min read",
-    category: "Trust",
-    coverImage: "bg-gradient-to-br from-indigo-500/20 via-purple-500/20 to-pink-500/20",
-    content: `
-# Introduction
-
-In modern cloud infrastructure, trust is often assumed rather than proven. We deploy changes, monitor metrics, and hope for the best. But hope is not a strategy.
-
-## The Problem with Current Approaches
-
-Traditional debugging and verification methods suffer from several fundamental issues:
-
-1. **Observation is not verification** - Just because you see something working doesn't mean it's verified
-2. **Time-based assumptions** - "It's been running for 24 hours, so it must be stable"
-3. **Black box systems** - We trust systems we cannot inspect or verify
-
-## Enter Verisig
-
-Verisig is our cryptographic verification layer that provides mathematical certainty about system state. It generates proofs that can be independently verified.
-
-### How It Works
-
-The Verisig system operates in three phases:
-
-1. **Capture** - Record system state and changes
-2. **Proof Generation** - Create cryptographic evidence
-3. **Verification** - Allow independent verification of the proof
-
-\`\`\`bash
-# Example verification command
-verisig verify --proof proof.json --system api.kintify.cloud
-✓ DNS TXT record verified
-✓ HTTP headers verified
-✓ JSON proof valid
-Overall: VERIFIED
-\`\`\`
-
-## Real-World Impact
-
-Teams using Verisig have reported:
-
-- 94% reduction in deployment-related incidents
-- 67% faster incident response times
-- Complete elimination of "unknown" system states
-
-## Technical Deep Dive
-
-### DNS TXT Record Verification
-
-We use DNS TXT records as a public, verifiable source of truth:
-
-\`\`\`text
-$ dig TXT api.example.com
-api.example.com. 300 IN TXT "v=verisig1; hash=sha256:abc123def456; ts=20240115"
-\`\`\`
-
-### HTTP Header Verification
-
-Response headers include signed proofs:
-
-\`\`\`http
-X-Verisig-Signature: {
-  "algo": "RSA-SHA256",
-  "sig": "MCoq...",
-  "timestamp": "2024-01-15T10:24:00Z"
-}
-\`\`\`
-
-## Conclusion
-
-Verisig transforms how we think about system verification. From hope-based trust to mathematical certainty.
-
-The future of infrastructure is verifiable. Are you ready?
-    `,
-  };
-
-  const tableOfContents = useMemo(() => [
-    { id: "introduction", title: "Introduction", level: 1 },
-    { id: "the-problem", title: "The Problem with Current Approaches", level: 2 },
-    { id: "enter-verisig", title: "Enter Verisig", level: 2 },
-    { id: "how-it-works", title: "How It Works", level: 3 },
-    { id: "real-world-impact", title: "Real-World Impact", level: 2 },
-    { id: "technical-deep-dive", title: "Technical Deep Dive", level: 2 },
-    { id: "dns-verification", title: "DNS TXT Record Verification", level: 3 },
-    { id: "http-verification", title: "HTTP Header Verification", level: 3 },
-    { id: "conclusion", title: "Conclusion", level: 2 },
-  ], []);
-
-  const relatedArticles = [
-    {
-      id: 2,
-      title: "Debugging Production Systems: The Old Way vs The Kintify Way",
-      excerpt:
-        "Compare traditional debugging approaches with our AI-powered system analysis.",
-      author: "Sarah Miller",
-      readTime: "6 min read",
-      category: "Infrastructure",
-      image: "bg-gradient-to-br from-green-500/20 to-emerald-500/20",
-    },
-    {
-      id: 3,
-      title: "Why Hope Is Not a Strategy for Production Systems",
-      excerpt:
-        "Understanding the cost of uncertainty and how verifiable systems change the game.",
-      author: "Marcus Johnson",
-      readTime: "5 min read",
-      category: "Reliability",
-      image: "bg-gradient-to-br from-orange-500/20 to-red-500/20",
-    },
-    {
-      id: 4,
-      title: "Building for Scale: How We Handle 10M+ Daily Analyses",
-      excerpt:
-        "A deep dive into our infrastructure and architectural decisions.",
-      author: "Alex Chen",
-      readTime: "10 min read",
-      category: "Infrastructure",
-      image: "bg-gradient-to-br from-blue-500/20 to-cyan-500/20",
-    },
-  ];
+  const params = useParams<{ slug: string }>();
+  const slug = params?.slug ?? "";
+  const article = useMemo(() => findBlogPost(slug), [slug]);
+  const tableOfContents = useMemo(() => article?.tableOfContents ?? [], [article]);
+  const relatedArticles = useMemo(() => getRelatedBlogPosts(slug), [slug]);
 
   // Scroll progress
   useEffect(() => {
@@ -181,6 +60,10 @@ The future of infrastructure is verifiable. Are you ready?
     window.addEventListener("scroll", handleScroll);
     return () => window.removeEventListener("scroll", handleScroll);
   }, [tableOfContents]);
+
+  if (!article) {
+    return null;
+  }
 
   // Process content to add IDs to headings
   const processContent = (content: string) => {
@@ -329,7 +212,7 @@ The future of infrastructure is verifiable. Are you ready?
             transition={{ duration: 0.5, delay: 0.1 }}
             className="max-w-5xl mx-auto"
           >
-            <div className={`h-64 sm:h-80 lg:h-96 rounded-2xl ${article.coverImage} border border-white/10 flex items-center justify-center relative overflow-hidden`}>
+            <div className={`h-64 sm:h-80 lg:h-96 rounded-2xl ${article.image} border border-white/10 flex items-center justify-center relative overflow-hidden`}>
               <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0f] to-transparent" />
               <span className="relative z-10 text-2xl font-bold text-white/20">KINTIFY</span>
             </div>
@@ -438,18 +321,18 @@ Overall: VERIFIED`}</code>
           </motion.div>
 
           <div className="grid md:grid-cols-3 gap-6 sm:gap-8">
-            {relatedArticles.map((article, index) => (
+            {relatedArticles.map((relatedArticle, index) => (
               <motion.article
-                key={article.id}
+                key={relatedArticle.slug}
                 initial={{ opacity: 0, y: 20 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ duration: 0.5, delay: index * 0.1 }}
                 className="bg-[#111117] rounded-2xl border border-white/10 overflow-hidden hover:border-indigo-500/30 hover:shadow-lg hover:shadow-indigo-500/10 transition-all duration-300 group"
               >
-                <div className={`h-40 ${article.image} flex items-center justify-center relative`}>
+                <div className={`h-40 ${relatedArticle.image} flex items-center justify-center relative`}>
                   <span className="text-xs font-medium text-gray-400 bg-black/30 backdrop-blur-sm px-3 py-1.5 rounded-full border border-white/10">
-                    {article.category}
+                    {relatedArticle.category}
                   </span>
                 </div>
 
@@ -457,23 +340,23 @@ Overall: VERIFIED`}</code>
                   <div className="flex items-center gap-3 text-xs text-gray-400 mb-3">
                     <span className="flex items-center gap-1">
                       <Clock className="w-3 h-3" />
-                      {article.readTime}
+                      {relatedArticle.readTime}
                     </span>
                   </div>
 
                   <h3 className="text-lg font-semibold mb-2 line-clamp-2 group-hover:text-indigo-400 transition-colors">
-                    {article.title}
+                    {relatedArticle.title}
                   </h3>
 
                   <p className="text-sm text-gray-400 mb-4 line-clamp-2">
-                    {article.excerpt}
+                    {relatedArticle.excerpt}
                   </p>
 
                   <div className="flex items-center justify-between">
-                    <span className="text-xs text-gray-300">{article.author}</span>
+                    <span className="text-xs text-gray-300">{relatedArticle.author}</span>
 
                     <Link
-                      href={`/blog/${article.id}`}
+                      href={`/blog/${relatedArticle.slug}`}
                       className="text-indigo-400 hover:text-indigo-300 transition-colors flex items-center gap-1 text-sm font-medium"
                     >
                       Read

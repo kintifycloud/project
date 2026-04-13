@@ -2,8 +2,10 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import { Check, Copy, ThumbsDown, ThumbsUp } from "lucide-react";
-import { useRef, useState, useEffect } from "react";
+import { Suspense, useRef, useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import Script from "next/script";
+import { FixDecisionPage } from "@/components/FixDecisionPage";
 
 type FixApiSuccess = {
   success: true;
@@ -426,7 +428,7 @@ function getSuggestedNextChecks(issueText: string, answerText: string): string[]
   return ["Check recent deploy diff", "Inspect failure logs", "Compare runtime config"];
 }
 
-export default function FixPage() {
+export function FixPageInner() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<FixApiSuccess | null>(null);
@@ -450,11 +452,19 @@ export default function FixPage() {
 
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const followUpInputRef = useRef<HTMLInputElement | null>(null);
+  const searchParams = useSearchParams();
 
   useEffect(() => {
     setThread(readFixThreadState());
     setUsageCount(readFixUsageCount());
   }, []);
+
+  useEffect(() => {
+    const prefill = searchParams.get("input");
+    if (prefill) {
+      setInput(prefill);
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     setCopyState("idle");
@@ -1063,5 +1073,13 @@ export default function FixPage() {
         </div>
       </main>
     </>
+  );
+}
+
+export default function FixPage() {
+  return (
+    <Suspense>
+      <FixDecisionPage />
+    </Suspense>
   );
 }

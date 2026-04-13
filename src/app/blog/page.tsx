@@ -15,96 +15,19 @@ import {
   Filter,
 } from "lucide-react";
 
+import { blogPosts } from "@/lib/blogPosts";
+
 export default function BlogPage() {
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [searchQuery, setSearchQuery] = useState("");
   const [isSearchFocused, setIsSearchFocused] = useState(false);
 
-  const featuredPost = {
-    id: 1,
-    title: "Introducing Verisig: Cryptographic Proofs for System Verification",
-    excerpt:
-      "Learn how our new verification layer provides mathematical certainty that your fixes actually work in production environments.",
-    author: "Alex Chen",
-    date: "2024-01-15",
-    readTime: "8 min read",
-    category: "Trust",
-    image: "bg-gradient-to-br from-indigo-500/20 via-purple-500/20 to-pink-500/20",
-    difficulty: "Advanced",
-    trending: true,
-  };
-
-  const blogPosts = [
-    {
-      id: 2,
-      title: "Debugging Production Systems: The Old Way vs The Kintify Way",
-      excerpt:
-        "Compare traditional debugging approaches with our AI-powered system analysis and see the difference in reliability.",
-      author: "Sarah Miller",
-      date: "2024-01-10",
-      readTime: "6 min read",
-      category: "Infrastructure",
-      image: "bg-gradient-to-br from-green-500/20 to-emerald-500/20",
-      difficulty: "Intermediate",
-      trending: false,
-    },
-    {
-      id: 3,
-      title: "Why Hope Is Not a Strategy for Production Systems",
-      excerpt:
-        "Understanding the cost of uncertainty and how verifiable systems change the game for DevOps teams.",
-      author: "Marcus Johnson",
-      date: "2024-01-05",
-      readTime: "5 min read",
-      category: "Reliability",
-      image: "bg-gradient-to-br from-orange-500/20 to-red-500/20",
-      difficulty: "Beginner",
-      trending: true,
-    },
-    {
-      id: 4,
-      title: "Building for Scale: How We Handle 10M+ Daily Analyses",
-      excerpt:
-        "A deep dive into our infrastructure and the architectural decisions that power our platform at scale.",
-      author: "Alex Chen",
-      date: "2023-12-28",
-      readTime: "10 min read",
-      category: "Infrastructure",
-      image: "bg-gradient-to-br from-blue-500/20 to-cyan-500/20",
-      difficulty: "Advanced",
-      trending: false,
-    },
-    {
-      id: 5,
-      title: "The Future of AI Debugging in Cloud Infrastructure",
-      excerpt:
-        "Exploring emerging trends in AI-powered debugging and where the industry is headed next.",
-      author: "Sarah Miller",
-      date: "2023-12-20",
-      readTime: "7 min read",
-      category: "AI Debugging",
-      image: "bg-gradient-to-br from-pink-500/20 to-rose-500/20",
-      difficulty: "Intermediate",
-      trending: true,
-    },
-    {
-      id: 6,
-      title: "Security by Design: How We Protect Your Data",
-      excerpt:
-        "Our approach to security, from encryption to audit logs, and everything in between.",
-      author: "Marcus Johnson",
-      date: "2023-12-15",
-      readTime: "9 min read",
-      category: "Security",
-      image: "bg-gradient-to-br from-violet-500/20 to-purple-500/20",
-      difficulty: "Advanced",
-      trending: false,
-    },
-  ];
+  const featuredPost = blogPosts[0]!;
+  const listingPosts = blogPosts.slice(1);
 
   const categories = ["All", "Trust", "Infrastructure", "AI Debugging", "Reliability", "Security"];
 
-  const filteredPosts = blogPosts.filter((post) => {
+  const filteredPosts = listingPosts.filter((post) => {
     const matchesCategory = selectedCategory === "All" || post.category === selectedCategory;
     const matchesSearch = post.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
                          post.excerpt.toLowerCase().includes(searchQuery.toLowerCase());
@@ -300,13 +223,15 @@ export default function BlogPage() {
                       </div>
                     </div>
 
-                    <Link
-                      href={`/blog/${featuredPost.id}`}
-                      className="inline-flex items-center gap-2 bg-indigo-500 hover:bg-indigo-600 text-white px-6 py-3 rounded-xl font-medium transition-all duration-200 hover:shadow-lg hover:shadow-indigo-500/25 group-hover:translate-x-1"
-                    >
-                      Read Article
-                      <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-                    </Link>
+                    <div className="mt-6">
+                      <Link
+                        href={`/blog/${featuredPost.slug}`}
+                        className="inline-flex items-center gap-2 bg-indigo-500 hover:bg-indigo-600 text-white px-6 py-3 rounded-xl font-medium transition-all duration-200 hover:shadow-lg hover:shadow-indigo-500/25 group-hover:translate-x-1"
+                      >
+                        Read Article
+                        <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                      </Link>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -331,11 +256,11 @@ export default function BlogPage() {
               <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
                 {filteredPosts.map((post, index) => (
                   <motion.article
-                    key={post.id}
+                    key={post.slug}
                     initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -20 }}
-                    transition={{ duration: 0.4, delay: index * 0.05 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ once: true }}
+                    transition={{ duration: 0.5, delay: index * 0.1 }}
                     className="bg-[#111117]/50 backdrop-blur-sm rounded-2xl border border-white/10 overflow-hidden hover:border-indigo-500/30 hover:shadow-xl hover:shadow-indigo-500/10 transition-all duration-300 group"
                   >
                     {/* Image/Gradient */}
@@ -394,7 +319,7 @@ export default function BlogPage() {
 
                       <div className="mt-4">
                         <Link
-                          href={`/blog/${post.id}`}
+                          href={`/blog/${post.slug}`}
                           className="text-indigo-400 hover:text-indigo-300 transition-colors flex items-center gap-1 text-sm font-medium group-hover:gap-2 transition-all"
                         >
                           Read Article
