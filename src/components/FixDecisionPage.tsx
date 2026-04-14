@@ -9,6 +9,31 @@ const ANALYSIS_MESSAGES = [
   "Preparing practical fix…",
 ] as const;
 
+// Premium animated dots component for loading state
+function AnimatedDots({ className }: { className?: string }) {
+  return (
+    <span className={className}>
+      <span className="inline-block animate-pulse">.</span>
+      <span className="inline-block animate-pulse" style={{ animationDelay: "150ms" }}>.</span>
+      <span className="inline-block animate-pulse" style={{ animationDelay: "300ms" }}>.</span>
+    </span>
+  );
+}
+
+// Premium analysis indicator with pulsing effect
+function PremiumAnalysisIndicator({ message }: { message: string }) {
+  return (
+    <div className="flex items-center gap-3">
+      <div className="relative">
+        <div className="h-2 w-2 rounded-full bg-indigo-400" />
+        <div className="absolute inset-0 h-2 w-2 rounded-full bg-indigo-400 animate-ping opacity-75" />
+      </div>
+      <span className="text-sm font-medium text-zinc-300">{message}</span>
+      <AnimatedDots className="text-zinc-500" />
+    </div>
+  );
+}
+
 type FixThreadTurn = {
   user: string;
   assistant: string;
@@ -292,30 +317,48 @@ function buildThreadPayload(input: string, thread: FixThreadState | null): FixRe
 
 function cleanOutputFormat(text: string): string {
   let cleaned = text.trim();
-  
-  // Remove excessive hyphens and bullet-like breaks
-  cleaned = cleaned.replace(/^-\s*/gm, '');
-  cleaned = cleaned.replace(/^•\s*/gm, '');
-  cleaned = cleaned.replace(/^\*\s*/gm, '');
-  
+
+  // Remove code block markers
+  cleaned = cleaned.replace(/```[\s\S]*?```/g, '');
+  cleaned = cleaned.replace(/`{3}[\w]*\n?/g, '');
+
+  // Remove excessive hyphens and bullet-like breaks at line starts
+  cleaned = cleaned.replace(/^[\s]*[-•*·]\s*/gm, '');
+  cleaned = cleaned.replace(/^[\s]*\d+[.)]\s*/gm, '');
+
   // Remove awkward markdown artifacts
-  cleaned = cleaned.replace(/\*\*/g, '');
-  cleaned = cleaned.replace(/`/g, '');
+  cleaned = cleaned.replace(/\*\*(.+?)\*\*/g, '$1');
+  cleaned = cleaned.replace(/__(.+?)__/g, '$1');
+  cleaned = cleaned.replace(/_(.+?)_/g, '$1');
+  cleaned = cleaned.replace(/`(.+?)`/g, '$1');
   cleaned = cleaned.replace(/#{1,6}\s*/g, '');
+  cleaned = cleaned.replace(/\[([^\]]*)\]\([^)]*\)/g, '$1');
   cleaned = cleaned.replace(/\[\]/g, '');
   cleaned = cleaned.replace(/\(\)/g, '');
+  cleaned = cleaned.replace(/!\[([^\]]*)\]/g, '$1');
+
+  // Normalize dashes and special punctuation
   cleaned = cleaned.replace(/—+/g, '—');
-  cleaned = cleaned.replace(/-+/g, '-');
-  
-  // Trim extra spaces and newlines
-  cleaned = cleaned.replace(/\s+/g, ' ');
-  cleaned = cleaned.replace(/\n\s*\n/g, ' ');
-  
-  // Ensure final sentence ends with period
-  if (cleaned.length > 0 && !/[.!?]$/.test(cleaned)) {
+  cleaned = cleaned.replace(/-{2,}/g, '—');
+  cleaned = cleaned.replace(/…/g, '...');
+
+  // Normalize whitespace - trim extra spaces and normalize newlines
+  cleaned = cleaned.replace(/[ \t]+/g, ' ');
+  cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
+  cleaned = cleaned.replace(/[ \t]*\n[ \t]*/g, ' ');
+
+  // Remove leading/trailing whitespace on each line
+  cleaned = cleaned.split('\n').map(line => line.trim()).join('\n');
+
+  // Ensure final sentence ends with proper punctuation
+  cleaned = cleaned.trim();
+  if (cleaned.length > 0 && !/[.!?;:]$/.test(cleaned)) {
     cleaned += '.';
   }
-  
+
+  // Remove any double periods
+  cleaned = cleaned.replace(/\.{2,}/g, '.');
+
   return cleaned.trim();
 }
 
@@ -356,7 +399,7 @@ export function FixDecisionPage() {
     }
   }, [searchParams]);
 
-  // Cycle through analysis messages during loading
+  // Cycle through analysis messages during loading - faster for premium feel
   useEffect(() => {
     if (!loading) {
       setAnalysisMessageIndex(0);
@@ -365,12 +408,12 @@ export function FixDecisionPage() {
 
     const interval = setInterval(() => {
       setAnalysisMessageIndex((prev) => (prev + 1) % ANALYSIS_MESSAGES.length);
-    }, 2000);
+    }, 1800);
 
     return () => clearInterval(interval);
   }, [loading]);
 
-  // Typewriter effect for result (word-by-word for smoother streaming)
+  // Smooth typewriter effect for result - chunk-based for natural streaming feel
   useEffect(() => {
     if (!result) {
       setDisplayedResult("");
@@ -379,17 +422,45 @@ export function FixDecisionPage() {
     }
 
     const cleanedResult = cleanOutputFormat(result);
-    const words = cleanedResult.split(' ');
+
+    // Split into natural chunks: words and punctuation
+    const chunks: string[] = [];
+    const words = cleanedResult.split(' ').filter((w): w is string => w.length > 0);
+
+    for (let i = 0; i < words.length; i++) {
+      const word = words[i] ?? '';
+      // Add word with space (except for last word)
+      if (i < words.length - 1) {
+        chunks.push(word + ' ');
+      } else {
+        chunks.push(word);
+      }
+    }
+
     setDisplayedResult("");
     setIsTyping(true);
 
-    let wordIndex = 0;
-    const speed = 50; // ms per word for smooth streaming
+    let chunkIndex = 0;
+    let currentText = "";
+
+    // Dynamic speed: faster for short words, slower for punctuation
+    const getSpeed = (chunk: string | undefined): number => {
+      if (!chunk) return 18;
+      if (/[.!?;:]$/.test(chunk)) return 60; // Pause at sentence ends
+      if (chunk.length > 8) return 25; // Longer words
+      return 18; // Normal words - smooth natural feel
+    };
 
     const typeNext = () => {
-      if (wordIndex < words.length) {
-        setDisplayedResult(words.slice(0, wordIndex + 1).join(' '));
-        wordIndex++;
+      if (chunkIndex < chunks.length) {
+        const chunk = chunks[chunkIndex];
+        if (chunk) {
+          currentText += chunk;
+          setDisplayedResult(currentText);
+        }
+        chunkIndex++;
+
+        const speed = getSpeed(chunk);
         setTimeout(typeNext, speed);
       } else {
         setIsTyping(false);
@@ -589,18 +660,16 @@ export function FixDecisionPage() {
               <p className="text-lg leading-relaxed text-white">
                 {displayedResult}
                 {isTyping && (
-                  <span className="inline-block w-0.5 h-5 bg-indigo-400 ml-1 animate-pulse" />
+                  <span className="ml-1 inline-block h-5 w-[2px] animate-pulse bg-indigo-400" />
                 )}
               </p>
             </div>
           ) : (
-            <div className="rounded-2xl border border-dashed border-zinc-800 px-5 py-8 text-sm text-zinc-500">
+            <div className="rounded-2xl border border-dashed border-zinc-800 bg-zinc-900/30 px-6 py-8">
               {loading ? (
-                <span className="animate-pulse">
-                  {ANALYSIS_MESSAGES[analysisMessageIndex]}
-                </span>
+                <PremiumAnalysisIndicator message={ANALYSIS_MESSAGES[analysisMessageIndex] ?? "Analyzing..."} />
               ) : (
-                "Your decision output will appear here."
+                <p className="text-sm text-zinc-500">Your decision output will appear here.</p>
               )}
             </div>
           )}
