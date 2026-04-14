@@ -12,6 +12,7 @@ type ProviderName = "gemini" | "deepseek" | "mistral" | "openrouter";
 
 const FIX_RATE_LIMIT_MAX_REQUESTS = 5;
 const FIX_RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
+const FIX_FREE_LIMIT = 5;
 const fixRateLimitStore = new Map<string, { count: number; resetAt: number }>();
 
 function getClientIp(request: Request): string {
@@ -54,45 +55,45 @@ function getRateLimitResponse(request: Request): Response | null {
 function buildEmergencyDecision(classification: IssueClassification): FixDecision {
   if (classification === 'api') {
     return {
-      action: 'Rollback the most recent service deploy or shift traffic to the last stable version before deeper debugging',
+      action: 'Check distributed traces for slow endpoints and database query latency before considering a deploy rollback',
       confidence: '82',
       blastRadius: 'service',
-      safety: 'Confirm the last healthy release target is available before rollback or traffic shift',
+      safety: 'Preserve trace data and slow query logs for further analysis',
     };
   }
 
   if (classification === 'kubernetes') {
     return {
-      action: 'Pause the rollout and inspect the last terminated pod before applying more cluster changes',
+      action: 'Check pod events, logs, and probe failures to identify why pods are crashing before pausing the rollout',
       confidence: '80',
       blastRadius: 'pod',
-      safety: 'Keep the previous ReplicaSet ready so you can undo the rollout immediately',
+      safety: 'Keep the previous ReplicaSet ready if you need to rollback',
     };
   }
 
   if (classification === 'docker') {
     return {
-      action: 'Stop restart churn and compare the running image and environment against the last healthy container',
+      action: 'Check container logs for entrypoint errors or resource limits causing restart loops before replacing the image',
       confidence: '78',
       blastRadius: 'pod',
-      safety: 'Preserve the last known good image tag and container config before replacing it',
+      safety: 'Preserve the current container config and environment variables for comparison',
     };
   }
 
   if (classification === 'infra') {
     return {
-      action: 'Revert the most recent infrastructure or edge change before more traffic is affected',
+      action: 'Check certificate expiry, chain validity, and DNS resolution before reverting infrastructure changes',
       confidence: '81',
       blastRadius: 'infra',
-      safety: 'Verify a tested snapshot, prior config, or certificate bundle is ready before revert',
+      safety: 'Preserve current certificate bundle and DNS records before making changes',
     };
   }
 
   return {
-    action: 'Freeze recent changes and capture logs, errors, and deploy deltas from the failure window before acting',
+    action: 'Check logs, error messages, and recent changes to identify the most likely failure point before taking action',
     confidence: '74',
     blastRadius: 'unknown',
-    safety: 'Avoid new changes until you have a rollback target or backup snapshot ready',
+    safety: 'Preserve logs and configuration snapshots before making changes',
   };
 }
 
@@ -194,6 +195,7 @@ export async function POST(req: Request) {
 
     const body = await req.json();
     const input = body.input?.trim();
+    const browserId = body.browserId?.trim() || '';
     const threadContext = parseThreadContext(body.thread);
 
     const rateLimitResponse = getRateLimitResponse(req);
@@ -221,6 +223,48 @@ export async function POST(req: Request) {
       return Response.json({
         error: "Input is required",
       }, { status: 400 });
+    }
+
+    // Check Supabase usage limit if browser_id is provided
+    let usageCount = 0;
+    let usageLimitReached = false;
+
+    if (browserId && supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('fix_usage')
+          .select('usage_count')
+          .eq('browser_id', browserId)
+          .maybeSingle();
+
+        if (error) {
+          console.warn('[Supabase] Usage check failed:', error);
+        } else if (data && data.usage_count !== undefined) {
+          usageCount = data.usage_count;
+          if (usageCount >= FIX_FREE_LIMIT) {
+            usageLimitReached = true;
+          }
+        }
+      } catch (error) {
+        console.warn('[Supabase] Usage check error:', error);
+      }
+    }
+
+    if (usageLimitReached) {
+      logger.emit({
+        severityText: 'WARN',
+        body: 'Free limit reached',
+        attributes: {
+          'api.route': '/api/fix',
+          'browser_id': browserId,
+          'usage_count': String(usageCount),
+        },
+      });
+      return Response.json({
+        error: 'Free limit reached',
+      }, {
+        status: 429,
+      });
     }
 
     if (!process.env.GEMINI_API_KEY && !process.env.DEEPSEEK_API_KEY && !process.env.MISTRAL_API_KEY && !process.env.OPENROUTER_API_KEY) {
@@ -258,7 +302,30 @@ export async function POST(req: Request) {
       const decision = toStrictDecision(VAGUE_INPUT_DECISION);
       const naturalText = rewriteDecisionToNaturalText(decision);
       saveFixHistory(input, naturalText, "openrouter");
-      
+
+      // Increment usage count in Supabase on successful vague input fallback response
+      if (browserId && supabase) {
+        try {
+          const { error: upsertError } = await supabase
+            .from('fix_usage')
+            .upsert({
+              browser_id: browserId,
+              usage_count: usageCount + 1,
+              last_used_at: new Date().toISOString(),
+            }, {
+              onConflict: 'browser_id',
+            });
+
+          if (upsertError) {
+            console.warn('[Supabase] Usage increment failed:', upsertError);
+          } else {
+            console.log('[Supabase] Usage incremented successfully for browser:', browserId);
+          }
+        } catch (error) {
+          console.warn('[Supabase] Usage increment error:', error);
+        }
+      }
+
       logger.emit({
         severityText: 'INFO',
         body: 'Vague input detected, returning fallback response',
@@ -268,7 +335,7 @@ export async function POST(req: Request) {
           'processing.time.ms': String(Date.now() - startTime),
         },
       });
-      
+
       return Response.json({
         answer: naturalText,
       }, {
@@ -295,6 +362,29 @@ export async function POST(req: Request) {
 
       console.log(`[Fix API] Using provider ${routed.provider}`);
       saveFixHistory(input, naturalText, routed.provider);
+
+      // Increment usage count in Supabase on successful response
+      if (browserId && supabase) {
+        try {
+          const { error: upsertError } = await supabase
+            .from('fix_usage')
+            .upsert({
+              browser_id: browserId,
+              usage_count: usageCount + 1,
+              last_used_at: new Date().toISOString(),
+            }, {
+              onConflict: 'browser_id',
+            });
+
+          if (upsertError) {
+            console.warn('[Supabase] Usage increment failed:', upsertError);
+          } else {
+            console.log('[Supabase] Usage incremented successfully for browser:', browserId);
+          }
+        } catch (error) {
+          console.warn('[Supabase] Usage increment error:', error);
+        }
+      }
 
       logger.emit({
         severityText: 'INFO',
@@ -325,6 +415,29 @@ export async function POST(req: Request) {
 
       console.log(`[Fix API] Falling back to emergency decision: ${message}`);
       saveFixHistory(input, naturalText, 'openrouter');
+
+      // Increment usage count in Supabase on successful emergency fallback response
+      if (browserId && supabase) {
+        try {
+          const { error: upsertError } = await supabase
+            .from('fix_usage')
+            .upsert({
+              browser_id: browserId,
+              usage_count: usageCount + 1,
+              last_used_at: new Date().toISOString(),
+            }, {
+              onConflict: 'browser_id',
+            });
+
+          if (upsertError) {
+            console.warn('[Supabase] Usage increment failed:', upsertError);
+          } else {
+            console.log('[Supabase] Usage incremented successfully for browser:', browserId);
+          }
+        } catch (error) {
+          console.warn('[Supabase] Usage increment error:', error);
+        }
+      }
 
       logger.emit({
         severityText: 'WARN',

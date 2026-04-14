@@ -108,7 +108,7 @@ function buildProviders(): ProviderDefinition[] {
               ],
               generationConfig: {
                 temperature: 0.15,
-                maxOutputTokens: 220,
+                maxOutputTokens: 400,
               },
             }),
             signal,
@@ -147,7 +147,7 @@ function buildProviders(): ProviderDefinition[] {
               { role: "user", content: userPrompt },
             ],
             temperature: 0.15,
-            max_tokens: 220,
+            max_tokens: 400,
           }),
           signal,
         });
@@ -184,7 +184,7 @@ function buildProviders(): ProviderDefinition[] {
               { role: "user", content: userPrompt },
             ],
             temperature: 0.15,
-            max_tokens: 220,
+            max_tokens: 400,
           }),
           signal,
         });
@@ -223,7 +223,7 @@ function buildProviders(): ProviderDefinition[] {
               { role: "user", content: userPrompt },
             ],
             temperature: 0.1,
-            max_tokens: 220,
+            max_tokens: 400,
           }),
           signal,
         });

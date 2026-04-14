@@ -8,10 +8,10 @@ export type FixDecision = {
 };
 
 export const VAGUE_INPUT_DECISION: FixDecision = {
-  action: "Provide logs, error messages, or recent changes before proceeding",
+  action: "Add specific error messages, logs, or context about what changed so the issue can be diagnosed accurately",
   confidence: "72",
   blastRadius: "unknown",
-  safety: "Avoid making changes until more data is available",
+  safety: "Avoid making changes until the failure pattern is clear",
 };
 
 function collapseWhitespace(value: string): string {

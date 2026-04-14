@@ -21,22 +21,22 @@ export type FixPromptInput = {
 
 function getClassificationHint(classification: IssueClassification): string {
   if (classification === "api") {
-    return "Treat this as an API or service-path incident with possible deploy, dependency, or traffic impact.";
+    return "For API or service incidents: check traces, slow queries, saturation, dependency health, or recent deploy changes. Use rollback only if there is a clear deploy regression.";
   }
 
   if (classification === "kubernetes") {
-    return "Treat this as a Kubernetes incident with workload safety, rollout safety, and pod stability in mind.";
+    return "For Kubernetes incidents: check pod events, logs, probes, resource limits, image issues, or rollout problems. Use pause or rollback only if the rollout is clearly causing failures.";
   }
 
   if (classification === "docker") {
-    return "Treat this as a container runtime incident with image, entrypoint, restart, and env safety in mind.";
+    return "For container incidents: check image, entrypoint, restart loops, environment variables, or resource constraints. Stop restart churn before making image changes.";
   }
 
   if (classification === "infra") {
-    return "Treat this as an infrastructure incident with network, certificate, database, or platform impact in mind.";
+    return "For infrastructure incidents: check certificates, DNS, network, database connectivity, or recent config changes. For SSL, check cert expiry, chain, and hostname. Use revert only if a recent infra change clearly caused the issue.";
   }
 
-  return "Treat this as an ambiguous production incident and choose the safest reversible next step.";
+  return "For ambiguous incidents: identify the most likely failure point and suggest a specific diagnostic or containment step. Avoid generic rollback suggestions without clear evidence.";
 }
 
 function buildFollowUpContext(threadContext?: FixThreadContext | null): string {
@@ -65,30 +65,35 @@ export function buildFixPrompt({ input, classification, threadContext }: FixProm
 } {
   const systemPrompt = [
     "You are a senior Site Reliability Engineer handling a live production incident.",
-    "Return the safest next action, not a full solution.",
-    "Prioritize safety above all else.",
-    "Assume production impact.",
-    "Avoid risky actions without warning.",
+    "Return a specific, issue-aware next action, not a generic template.",
+    "Prioritize the most likely root cause and a practical first check or fix.",
+    "Assume production impact but avoid defaulting to rollback without clear evidence of a deploy regression.",
+    "When context is limited, use careful language: this usually happens when, most likely, a common cause is.",
+    "Prioritize exact error codes, stack traces, and log details provided by the user over generic cloud advice.",
     "No theory.",
     "No long explanations.",
     "Return ONLY valid JSON. No other text.",
     "Return EXACTLY this object shape with string values:",
-    '{"action":"<safe next action>","confidence":"<70–95>","blastRadius":"<service|pod|infra|unknown>","safety":"<rollback or backup suggestion>"}',
+    '{"action":"<specific next action based on issue type>","confidence":"<70–95>","blastRadius":"<service|pod|infra|unknown>","safety":"<relevant safety or backup note>"}',
     "No markdown.",
     "No code fences.",
     "No extra keys.",
     "No extra text.",
     "Keep each field short and precise.",
     "Never say it depends.",
-    "Never say investigate issue.",
-    "Never say check logs unless paired with a decisive safe action.",
-    "Never say maybe, perhaps, possibly, might, could, or consider.",
-    "Never say try, see if, or verify unless it leads to a specific safe action.",
-    "Prefer rollback, traffic shift, rollout pause, isolation, or evidence-preserving next steps when risk is high.",
-    "Action must be decisive: rollback, revert, pause, drain, isolate, route traffic, failover, or freeze changes.",
+    "Never say investigate issue without a specific next step.",
+    "Never say try, see if, or verify unless it leads to a specific action.",
+    "For SSL issues: check cert expiry, chain validity, hostname match, or recent certificate renewals.",
+    "For API latency: check traces, slow queries, database saturation, or recent code changes.",
+    "For CrashLoopBackOff: check pod logs, resource limits, probe failures, or image issues.",
+    "For Cloudflare 5xx: check origin health, cache configuration, firewall rules, or DNS changes.",
+    "For database locks: check connection pool, slow queries, transaction locks, or recent schema changes.",
+    "For memory/OOM: check pod limits, container memory usage, memory leaks, or recent code changes.",
+    "Use rollback, revert, pause, or freeze ONLY when there is clear evidence of a recent deploy regression or production outage.",
+    "Otherwise, suggest a specific diagnostic or targeted fix relevant to the issue type.",
     "Confidence must be between 70 and 95.",
     "BlastRadius must be exactly: service, pod, infra, or unknown.",
-    "Safety must include: rollback, backup, snapshot, pause, revert, freeze, drain, route traffic, previous version, avoid, preserve, or keep.",
+    "Safety must be relevant to the action: backup, snapshot, preserve evidence, or avoid data loss.",
   ].join("\n");
 
   const userPrompt = [
@@ -118,10 +123,10 @@ export function buildFixPrompt({ input, classification, threadContext }: FixProm
     "Example:",
     "User: API latency after deploy",
     "Output:",
-    "Action: Rollback recent deploy or route traffic to previous stable version before debugging slow endpoints",
-    "Confidence: 88",
+    "Action: Check distributed traces for slow endpoints and database query latency before considering rollback",
+    "Confidence: 85",
     "Blast Radius: service",
-    "Safety: Ensure previous deployment snapshot is available before rollback",
+    "Safety: Preserve trace data and slow query logs for further analysis",
   ]
     .filter(Boolean)
     .join("\n");

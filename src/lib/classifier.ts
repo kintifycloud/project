@@ -10,22 +10,37 @@ const CLASSIFIER_RULES: Array<{ type: IssueClassification; reason: string; patte
   {
     type: "kubernetes",
     reason: "Detected Kubernetes runtime or workload signals",
-    pattern: /(kubernetes|kubectl|\bpod\b|deployment|daemonset|statefulset|namespace|crashloopbackoff|oomkilled|ingress|configmap|secret|helm|k8s)/i,
+    pattern: /(kubernetes|kubectl|\bpod\b|deployment|daemonset|statefulset|namespace|crashloopbackoff|oomkilled|ingress|configmap|secret|helm|k8s|replicaset|service|node|pv|pvc)/i,
   },
   {
     type: "docker",
     reason: "Detected container runtime or image signals",
-    pattern: /(docker|dockerfile|docker-compose|container exited|container restart|image pull|entrypoint|compose)/i,
+    pattern: /(docker|dockerfile|docker-compose|container exited|container restart|image pull|entrypoint|compose|oom killed|memory limit|restart policy)/i,
   },
   {
     type: "api",
     reason: "Detected API, gateway, latency, or request path signals",
-    pattern: /(api|endpoint|request|response|latency|timeout|p95|p99|gateway|502|503|504|bad gateway|upstream|route traffic)/i,
+    pattern: /(api|endpoint|request|response|latency|timeout|p95|p99|gateway|502|503|504|bad gateway|upstream|route traffic|slow query|connection pool|database latency)/i,
   },
   {
     type: "infra",
     reason: "Detected infrastructure, platform, or network signals",
-    pattern: /(terraform|dns|ssl|tls|certificate|network|load balancer|alb|elb|cloudwatch|aws|gcp|azure|vm|node|host|infra|database|postgres|mysql|redis)/i,
+    pattern: /(terraform|dns|ssl|tls|certificate|network|load balancer|alb|elb|cloudwatch|aws|gcp|azure|vm|node|host|infra|database|postgres|mysql|redis|cloudflare|cdn|edge|cache|firewall|vpc|subnet)/i,
+  },
+  {
+    type: "infra",
+    reason: "Detected SSL/TLS certificate issues",
+    pattern: /(ssl|tls|certificate|cert expired|chain|hostname mismatch|handshake|certificate authority|lets encrypt|certbot)/i,
+  },
+  {
+    type: "infra",
+    reason: "Detected database connection or lock issues",
+    pattern: /(connection refused|connection timeout|deadlock|lock wait|pool exhausted|too many connections|database lock|transaction deadlock)/i,
+  },
+  {
+    type: "kubernetes",
+    reason: "Detected memory or resource exhaustion",
+    pattern: /(oom killed|out of memory|memory limit|cpu throttling|resource limit|evicted|pressure)/i,
   },
 ];
 

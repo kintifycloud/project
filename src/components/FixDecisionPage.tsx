@@ -39,6 +39,7 @@ type FixUsageState = {
 
 const FIX_THREAD_STORAGE_KEY = "kintify.fix.thread";
 const FIX_USAGE_STORAGE_KEY = "kintify.fix.usage.v2";
+const FIX_BROWSER_ID_KEY = "kintify.browser_id";
 const FIX_FREE_LIMIT = 5;
 const FIX_USAGE_WINDOW_MS = 60 * 60 * 1000;
 
@@ -69,6 +70,28 @@ function createFixSessionId(): string {
   }
 
   return `fix-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function getBrowserId(): string {
+  if (typeof window === "undefined") {
+    return "";
+  }
+
+  try {
+    const existing = window.localStorage.getItem(FIX_BROWSER_ID_KEY);
+    if (existing) {
+      return existing;
+    }
+
+    const newId = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : `browser-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+
+    window.localStorage.setItem(FIX_BROWSER_ID_KEY, newId);
+    return newId;
+  } catch {
+    return "";
+  }
 }
 
 function toThreadString(value: unknown, maxLength: number): string {
@@ -279,6 +302,10 @@ function cleanOutputFormat(text: string): string {
   cleaned = cleaned.replace(/\*\*/g, '');
   cleaned = cleaned.replace(/`/g, '');
   cleaned = cleaned.replace(/#{1,6}\s*/g, '');
+  cleaned = cleaned.replace(/\[\]/g, '');
+  cleaned = cleaned.replace(/\(\)/g, '');
+  cleaned = cleaned.replace(/—+/g, '—');
+  cleaned = cleaned.replace(/-+/g, '-');
   
   // Trim extra spaces and newlines
   cleaned = cleaned.replace(/\s+/g, ' ');
@@ -310,6 +337,7 @@ export function FixDecisionPage() {
   const [analysisMessageIndex, setAnalysisMessageIndex] = useState(0);
   const [displayedResult, setDisplayedResult] = useState("");
   const [isTyping, setIsTyping] = useState(false);
+  const [browserId] = useState(() => getBrowserId());
 
   useEffect(() => {
     const nextThread = readFixThreadState();
@@ -342,7 +370,7 @@ export function FixDecisionPage() {
     return () => clearInterval(interval);
   }, [loading]);
 
-  // Typewriter effect for result
+  // Typewriter effect for result (word-by-word for smoother streaming)
   useEffect(() => {
     if (!result) {
       setDisplayedResult("");
@@ -351,16 +379,17 @@ export function FixDecisionPage() {
     }
 
     const cleanedResult = cleanOutputFormat(result);
+    const words = cleanedResult.split(' ');
     setDisplayedResult("");
     setIsTyping(true);
 
-    let index = 0;
-    const speed = 15; // ms per character
+    let wordIndex = 0;
+    const speed = 50; // ms per word for smooth streaming
 
     const typeNext = () => {
-      if (index < cleanedResult.length) {
-        setDisplayedResult(cleanedResult.slice(0, index + 1));
-        index++;
+      if (wordIndex < words.length) {
+        setDisplayedResult(words.slice(0, wordIndex + 1).join(' '));
+        wordIndex++;
         setTimeout(typeNext, speed);
       } else {
         setIsTyping(false);
@@ -424,8 +453,9 @@ export function FixDecisionPage() {
         },
         body: JSON.stringify({
           input: trimmedInput,
+          browserId,
           ...(threadPayload ? { thread: threadPayload } : {}),
-        } satisfies FixRequestBody),
+        } satisfies FixRequestBody & { browserId: string }),
       });
 
       const data = (await response.json().catch(() => null)) as unknown;

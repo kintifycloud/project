@@ -35,10 +35,6 @@ const BAD_OUTPUT_PATTERNS = [
   /\bthe failure is caused by\b/i,
   /\bare most likely caused by\b/i,
   /\bis most likely caused by\b/i,
-  /\bmight be\b/i,
-  /\bmay be\b/i,
-  /\bcould be\b/i,
-  /\bpossibly\b/i,
 ];
 
 export type QualityCheckResult = {
@@ -73,7 +69,7 @@ export function qualityCheck(decision: FixDecision): QualityCheckResult {
     reasons.push("missing_fields");
   }
 
-  if (action.length > 180 || safety.length > 160) {
+  if (action.length > 380 || safety.length > 200) {
     reasons.push("too_long");
   }
 
@@ -113,12 +109,8 @@ export function qualityCheck(decision: FixDecision): QualityCheckResult {
     reasons.push("repeated_timing");
   }
 
-  if (!/(rollback|backup|snapshot|pause|revert|freeze|drain|route traffic|previous version|avoid|preserve|keep)/i.test(safety)) {
+  if (!/(preserve|backup|snapshot|keep|avoid|document|log|record|check before|verify before|confirm before)/i.test(safety)) {
     reasons.push("weak_safety");
-  }
-
-  if (!/(rollback|traffic shift|pause rollout|revert|drain|isolate|route traffic|previous stable version|stop restart|freeze|restore|failover)/i.test(action)) {
-    reasons.push("action_not_decisive");
   }
 
   return {

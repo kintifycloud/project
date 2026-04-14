@@ -26,26 +26,6 @@ const GENERIC_PHRASES_TO_REMOVE = [
   "standard procedures",
 ];
 
-const DECISIVE_STARTERS = [
-  "Rollback",
-  "Revert",
-  "Pause",
-  "Stop",
-  "Drain",
-  "Isolate",
-  "Route traffic",
-  "Shift traffic",
-  "Failover",
-  "Freeze",
-  "Restore",
-  "Reattach",
-  "Restart",
-  "Redeploy",
-  "Apply",
-  "Replace",
-  "Switch",
-];
-
 function removeGenericPhrases(text: string): string {
   let cleaned = text;
   for (const phrase of GENERIC_PHRASES_TO_REMOVE) {
@@ -55,20 +35,31 @@ function removeGenericPhrases(text: string): string {
   return cleaned.replace(/\s+/g, " ").trim();
 }
 
-function ensureDecisiveTone(text: string): string {
-  const words = text.trim().split(/\s+/);
-  if (words.length === 0) return text;
+function removeDuplicateWords(text: string): string {
+  return text.replace(/\b(\w+)\s+\1\b/gi, "$1").trim();
+}
 
-  const firstWord = words[0]?.toLowerCase() ?? "";
-  if (DECISIVE_STARTERS.some((starter) => firstWord.startsWith(starter.toLowerCase()))) {
-    return text;
+function removeMarkdownArtifacts(text: string): string {
+  return text
+    .replace(/```(?:json)?/gi, "")
+    .replace(/\*\*/g, "")
+    .replace(/__/g, "")
+    .replace(/\[\]/g, "")
+    .replace(/\(\)/g, "")
+    .replace(/^[-*]\s+/gm, "")
+    .replace(/^\d+\.\s+/gm, "")
+    .trim();
+}
+
+function normalizePunctuation(text: string): string {
+  let cleaned = text;
+  cleaned = cleaned.replace(/—+/g, "—");
+  cleaned = cleaned.replace(/-+/g, "-");
+  cleaned = cleaned.replace(/\s+/g, " ");
+  if (!/[.!?]$/.test(cleaned)) {
+    cleaned = cleaned + ".";
   }
-
-  if (firstWord === "the" || firstWord === "a" || firstWord === "an") {
-    return text;
-  }
-
-  return text;
+  return cleaned.trim();
 }
 
 function injectSafetyNaturally(action: string, safety: string): string {
@@ -101,7 +92,7 @@ function shortenToMaxTwoSentences(text: string): string {
   return sentences.slice(0, 2).join(" ").trim();
 }
 
-function limitCharacterCount(text: string, maxChars: number = 220): string {
+function limitCharacterCount(text: string, maxChars: number = 380): string {
   if (text.length <= maxChars) return text;
 
   const truncated = text.slice(0, maxChars - 3);
@@ -147,22 +138,26 @@ export function rewriteDecisionToNaturalText(decision: FixDecision): string {
 
   let text = context.action;
 
+  text = removeMarkdownArtifacts(text);
   text = removeGenericPhrases(text);
-  text = ensureDecisiveTone(text);
+  text = removeDuplicateWords(text);
   text = hintScopeImplicitly(text, context.blastRadius);
   text = injectSafetyNaturally(text, context.safety);
   text = shortenToMaxTwoSentences(text);
-  text = limitCharacterCount(text, 220);
+  text = normalizePunctuation(text);
+  text = limitCharacterCount(text, 380);
 
   return text.trim();
 }
 
 export function rewriteRawToNaturalText(raw: string, blastRadius: string = "unknown"): string {
   let text = raw.trim();
+  text = removeMarkdownArtifacts(text);
   text = removeGenericPhrases(text);
-  text = ensureDecisiveTone(text);
+  text = removeDuplicateWords(text);
   text = hintScopeImplicitly(text, blastRadius);
   text = shortenToMaxTwoSentences(text);
-  text = limitCharacterCount(text, 220);
+  text = normalizePunctuation(text);
+  text = limitCharacterCount(text, 380);
   return text.trim();
 }
