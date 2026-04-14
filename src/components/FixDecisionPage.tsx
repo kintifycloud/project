@@ -3,15 +3,6 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
-type BlastRadius = "service" | "pod" | "infra" | "unknown";
-
-type FixDecision = {
-  action: string;
-  confidence: string;
-  blastRadius: BlastRadius;
-  safety: string;
-};
-
 type FixThreadTurn = {
   user: string;
   assistant: string;
@@ -44,21 +35,6 @@ const FIX_THREAD_STORAGE_KEY = "kintify.fix.thread";
 const FIX_USAGE_STORAGE_KEY = "kintify.fix.usage.v2";
 const FIX_FREE_LIMIT = 5;
 const FIX_USAGE_WINDOW_MS = 60 * 60 * 1000;
-
-function isFixDecision(value: unknown): value is FixDecision {
-  if (!value || typeof value !== "object") {
-    return false;
-  }
-
-  const decision = value as Record<string, unknown>;
-
-  return (
-    typeof decision.action === "string" &&
-    typeof decision.confidence === "string" &&
-    typeof decision.blastRadius === "string" &&
-    typeof decision.safety === "string"
-  );
-}
 
 function getInputGuidanceMessage(input: string): string | null {
   const trimmed = input.trim();
@@ -285,37 +261,13 @@ function buildThreadPayload(input: string, thread: FixThreadState | null): FixRe
   };
 }
 
-function formatDecisionSummary(decision: FixDecision): string {
-  return [
-    `Action: ${decision.action}`,
-    `Confidence: ${decision.confidence}`,
-    `Blast Radius: ${decision.blastRadius}`,
-    `Safety: ${decision.safety}`,
-  ].join("\n");
-}
-
-function getScopeLabel(blastRadius: BlastRadius): string {
-  if (blastRadius === "service") {
-    return "service-level impact likely";
-  }
-
-  if (blastRadius === "pod") {
-    return "pod or workload-level impact likely";
-  }
-
-  if (blastRadius === "infra") {
-    return "infrastructure-level impact likely";
-  }
-
-  return "scope unclear";
-}
 
 export function FixDecisionPage() {
   const searchParams = useSearchParams();
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [result, setResult] = useState<FixDecision | null>(null);
+  const [result, setResult] = useState<string | null>(null);
   const [thread, setThread] = useState<FixThreadState | null>(null);
   const [followUpInput, setFollowUpInput] = useState("");
   const [usageState, setUsageState] = useState<FixUsageState>({
@@ -418,14 +370,13 @@ export function FixDecisionPage() {
         return;
       }
 
-      if (!isFixDecision(data)) {
+      if (!data || typeof data !== "object" || !("answer" in data) || typeof (data as { answer?: unknown }).answer !== "string") {
         setError("Failed to analyze issue. Please try again.");
         return;
       }
 
-      const nextResult = data satisfies FixDecision;
+      const nextResult = (data as { answer: string }).answer;
       const nextUsageState = incrementFixUsageState(currentUsage);
-      const answerSummary = formatDecisionSummary(nextResult);
 
       setResult(nextResult);
       setUsageState(nextUsageState);
@@ -434,18 +385,18 @@ export function FixDecisionPage() {
       const nextThread = threadPayload ? {
         sessionId: threadPayload.sessionId,
         originalIssue: threadPayload.originalIssue,
-        previousAnswer: answerSummary,
+        previousAnswer: nextResult,
         recentMessages: [
           ...threadPayload.recentMessages,
           {
             user: trimmedInput,
-            assistant: answerSummary,
+            assistant: nextResult,
           },
         ].slice(-3),
       } satisfies FixThreadState : {
         sessionId: createFixSessionId(),
         originalIssue: trimmedInput,
-        previousAnswer: answerSummary,
+        previousAnswer: nextResult,
         recentMessages: [],
       } satisfies FixThreadState;
 
@@ -527,33 +478,10 @@ export function FixDecisionPage() {
           ) : null}
 
           {result ? (
-            <div className="rounded-2xl border border-zinc-800 bg-zinc-900 px-5 py-5">
-              <div className="space-y-4">
-                <div>
-                  <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-zinc-500">Action</p>
-                  <p className="mt-2 text-lg leading-relaxed text-white">{result.action}</p>
-                </div>
-
-                <div className="grid gap-4 sm:grid-cols-3">
-                  <div>
-                    <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-zinc-500">Confidence</p>
-                    <p className="mt-2 text-sm text-zinc-200">{result.confidence}</p>
-                  </div>
-                  <div>
-                    <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-zinc-500">Scope</p>
-                    <p className="mt-2 text-sm text-zinc-200">{getScopeLabel(result.blastRadius)}</p>
-                  </div>
-                  <div>
-                    <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-zinc-500">Blast Radius</p>
-                    <p className="mt-2 text-sm text-zinc-200">{result.blastRadius}</p>
-                  </div>
-                </div>
-
-                <div>
-                  <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-zinc-500">Safety</p>
-                  <p className="mt-2 text-sm leading-relaxed text-zinc-200">{result.safety}</p>
-                </div>
-              </div>
+            <div className="rounded-2xl border border-zinc-800 bg-zinc-900 px-6 py-8">
+              <p className="text-lg leading-relaxed text-white animate-in fade-in duration-300">
+                {result}
+              </p>
             </div>
           ) : (
             <div className="rounded-2xl border border-dashed border-zinc-800 px-5 py-8 text-sm text-zinc-500">

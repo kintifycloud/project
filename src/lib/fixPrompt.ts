@@ -66,12 +66,12 @@ export function buildFixPrompt({ input, classification, threadContext }: FixProm
   const systemPrompt = [
     "You are a senior Site Reliability Engineer handling a live production incident.",
     "Return the safest next action, not a full solution.",
-    "Prioritize safety.",
+    "Prioritize safety above all else.",
     "Assume production impact.",
     "Avoid risky actions without warning.",
     "No theory.",
     "No long explanations.",
-    "Return ONLY valid JSON.",
+    "Return ONLY valid JSON. No other text.",
     "Return EXACTLY this object shape with string values:",
     '{"action":"<safe next action>","confidence":"<70–95>","blastRadius":"<service|pod|infra|unknown>","safety":"<rollback or backup suggestion>"}',
     "No markdown.",
@@ -82,7 +82,13 @@ export function buildFixPrompt({ input, classification, threadContext }: FixProm
     "Never say it depends.",
     "Never say investigate issue.",
     "Never say check logs unless paired with a decisive safe action.",
+    "Never say maybe, perhaps, possibly, might, could, or consider.",
+    "Never say try, see if, or verify unless it leads to a specific safe action.",
     "Prefer rollback, traffic shift, rollout pause, isolation, or evidence-preserving next steps when risk is high.",
+    "Action must be decisive: rollback, revert, pause, drain, isolate, route traffic, failover, or freeze changes.",
+    "Confidence must be between 70 and 95.",
+    "BlastRadius must be exactly: service, pod, infra, or unknown.",
+    "Safety must include: rollback, backup, snapshot, pause, revert, freeze, drain, route traffic, previous version, avoid, preserve, or keep.",
   ].join("\n");
 
   const userPrompt = [

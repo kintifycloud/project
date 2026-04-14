@@ -7,6 +7,11 @@ const VAGUE_ACTION_PATTERNS = [
   /\bperhaps\b/i,
   /\blook into\b/i,
   /\bgather more data\b/i,
+  /\bconsider\b/i,
+  /\btry\b/i,
+  /\bcheck\b(?!.*(rollback|backup|snapshot|pause|revert|freeze|drain|route traffic))/i,
+  /\bsee if\b/i,
+  /\bverify\b(?!.*(rollback|backup|snapshot|pause|revert|freeze|drain|route traffic))/i,
 ];
 
 const GENERIC_DEVOPS_PATTERNS = [
@@ -15,6 +20,25 @@ const GENERIC_DEVOPS_PATTERNS = [
   /\bbest practices\b/i,
   /\bfollow standard procedures\b/i,
   /\bgeneric devops advice\b/i,
+  /\bensure proper\b/i,
+  /\bmake sure\b/i,
+  /\bcheck configuration\b/i,
+  /\breview settings\b/i,
+];
+
+const BAD_OUTPUT_PATTERNS = [
+  /\bfirst first\b/i,
+  /\bthen then\b/i,
+  /\band and\b/i,
+  /\bthis is probably happening because this is probably happening because\b/i,
+  /\bthe issue is caused by\b/i,
+  /\bthe failure is caused by\b/i,
+  /\bare most likely caused by\b/i,
+  /\bis most likely caused by\b/i,
+  /\bmight be\b/i,
+  /\bmay be\b/i,
+  /\bcould be\b/i,
+  /\bpossibly\b/i,
 ];
 
 export type QualityCheckResult = {
@@ -53,6 +77,14 @@ export function qualityCheck(decision: FixDecision): QualityCheckResult {
     reasons.push("too_long");
   }
 
+  if (action.length < 20) {
+    reasons.push("action_too_short");
+  }
+
+  if (safety.length < 15) {
+    reasons.push("safety_too_short");
+  }
+
   if (!Number.isFinite(confidence) || confidence < 70) {
     reasons.push("low_confidence");
   }
@@ -69,6 +101,10 @@ export function qualityCheck(decision: FixDecision): QualityCheckResult {
     reasons.push("generic_advice");
   }
 
+  if (BAD_OUTPUT_PATTERNS.some((pattern) => pattern.test(`${action} ${safety}`))) {
+    reasons.push("bad_pattern");
+  }
+
   if (hasRepeatedPhrase(`${action} ${safety}`)) {
     reasons.push("duplicate_phrase");
   }
@@ -77,8 +113,12 @@ export function qualityCheck(decision: FixDecision): QualityCheckResult {
     reasons.push("repeated_timing");
   }
 
-  if (!/(rollback|backup|snapshot|pause|revert|freeze|drain|route traffic|previous version|avoid)/i.test(safety)) {
+  if (!/(rollback|backup|snapshot|pause|revert|freeze|drain|route traffic|previous version|avoid|preserve|keep)/i.test(safety)) {
     reasons.push("weak_safety");
+  }
+
+  if (!/(rollback|traffic shift|pause rollout|revert|drain|isolate|route traffic|previous stable version|stop restart|freeze|restore|failover)/i.test(action)) {
+    reasons.push("action_not_decisive");
   }
 
   return {
