@@ -3,6 +3,12 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
+const ANALYSIS_MESSAGES = [
+  "Analyzing infrastructure signals…",
+  "Checking likely failure points…",
+  "Preparing practical fix…",
+] as const;
+
 type FixThreadTurn = {
   user: string;
   assistant: string;
@@ -261,6 +267,31 @@ function buildThreadPayload(input: string, thread: FixThreadState | null): FixRe
   };
 }
 
+function cleanOutputFormat(text: string): string {
+  let cleaned = text.trim();
+  
+  // Remove excessive hyphens and bullet-like breaks
+  cleaned = cleaned.replace(/^-\s*/gm, '');
+  cleaned = cleaned.replace(/^•\s*/gm, '');
+  cleaned = cleaned.replace(/^\*\s*/gm, '');
+  
+  // Remove awkward markdown artifacts
+  cleaned = cleaned.replace(/\*\*/g, '');
+  cleaned = cleaned.replace(/`/g, '');
+  cleaned = cleaned.replace(/#{1,6}\s*/g, '');
+  
+  // Trim extra spaces and newlines
+  cleaned = cleaned.replace(/\s+/g, ' ');
+  cleaned = cleaned.replace(/\n\s*\n/g, ' ');
+  
+  // Ensure final sentence ends with period
+  if (cleaned.length > 0 && !/[.!?]$/.test(cleaned)) {
+    cleaned += '.';
+  }
+  
+  return cleaned.trim();
+}
+
 
 export function FixDecisionPage() {
   const searchParams = useSearchParams();
@@ -276,6 +307,9 @@ export function FixDecisionPage() {
   });
   const [inputGuidance, setInputGuidance] = useState<string | null>(null);
   const [lastSubmittedInput, setLastSubmittedInput] = useState("");
+  const [analysisMessageIndex, setAnalysisMessageIndex] = useState(0);
+  const [displayedResult, setDisplayedResult] = useState("");
+  const [isTyping, setIsTyping] = useState(false);
 
   useEffect(() => {
     const nextThread = readFixThreadState();
@@ -293,6 +327,48 @@ export function FixDecisionPage() {
       setInput(prefill);
     }
   }, [searchParams]);
+
+  // Cycle through analysis messages during loading
+  useEffect(() => {
+    if (!loading) {
+      setAnalysisMessageIndex(0);
+      return;
+    }
+
+    const interval = setInterval(() => {
+      setAnalysisMessageIndex((prev) => (prev + 1) % ANALYSIS_MESSAGES.length);
+    }, 2000);
+
+    return () => clearInterval(interval);
+  }, [loading]);
+
+  // Typewriter effect for result
+  useEffect(() => {
+    if (!result) {
+      setDisplayedResult("");
+      setIsTyping(false);
+      return;
+    }
+
+    const cleanedResult = cleanOutputFormat(result);
+    setDisplayedResult("");
+    setIsTyping(true);
+
+    let index = 0;
+    const speed = 15; // ms per character
+
+    const typeNext = () => {
+      if (index < cleanedResult.length) {
+        setDisplayedResult(cleanedResult.slice(0, index + 1));
+        index++;
+        setTimeout(typeNext, speed);
+      } else {
+        setIsTyping(false);
+      }
+    };
+
+    typeNext();
+  }, [result]);
 
   async function submitIssue(rawInput: string, source: "main" | "follow_up") {
     const trimmedInput = rawInput.trim();
@@ -379,6 +455,7 @@ export function FixDecisionPage() {
       const nextUsageState = incrementFixUsageState(currentUsage);
 
       setResult(nextResult);
+      setDisplayedResult("");
       setUsageState(nextUsageState);
       writeFixUsageState(nextUsageState);
 
@@ -479,13 +556,22 @@ export function FixDecisionPage() {
 
           {result ? (
             <div className="rounded-2xl border border-zinc-800 bg-zinc-900 px-6 py-8">
-              <p className="text-lg leading-relaxed text-white animate-in fade-in duration-300">
-                {result}
+              <p className="text-lg leading-relaxed text-white">
+                {displayedResult}
+                {isTyping && (
+                  <span className="inline-block w-0.5 h-5 bg-indigo-400 ml-1 animate-pulse" />
+                )}
               </p>
             </div>
           ) : (
             <div className="rounded-2xl border border-dashed border-zinc-800 px-5 py-8 text-sm text-zinc-500">
-              {loading ? "Evaluating incident safety..." : "Your decision output will appear here."}
+              {loading ? (
+                <span className="animate-pulse">
+                  {ANALYSIS_MESSAGES[analysisMessageIndex]}
+                </span>
+              ) : (
+                "Your decision output will appear here."
+              )}
             </div>
           )}
 
