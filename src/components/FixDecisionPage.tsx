@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { motion, AnimatePresence } from "framer-motion";
+import { saveToHistory } from "@/lib/history";
 
 const ANALYSIS_MESSAGES = [
   "Analyzing infrastructure signals…",
@@ -381,6 +383,8 @@ export function FixDecisionPage() {
   const [displayedResult, setDisplayedResult] = useState("");
   const [isTyping, setIsTyping] = useState(false);
   const [browserId] = useState(() => getBrowserId());
+  const [trace, setTrace] = useState<string | null>(null);
+  const [showTrace, setShowTrace] = useState(false);
 
   useEffect(() => {
     const nextThread = readFixThreadState();
@@ -553,12 +557,25 @@ export function FixDecisionPage() {
       }
 
       const nextResult = (data as { answer: string }).answer;
+      const nextTrace = (data as { trace?: string }).trace ?? null;
       const nextUsageState = incrementFixUsageState(currentUsage);
 
       setResult(nextResult);
+      setTrace(nextTrace);
+      setShowTrace(false);
       setDisplayedResult("");
       setUsageState(nextUsageState);
       writeFixUsageState(nextUsageState);
+
+      // Save to history
+      const historyItem: { input: string; output: string; trace?: string } = {
+        input: trimmedInput,
+        output: nextResult,
+      };
+      if (nextTrace) {
+        historyItem.trace = nextTrace;
+      }
+      saveToHistory(historyItem);
 
       const nextThread = threadPayload ? {
         sessionId: threadPayload.sessionId,
@@ -663,6 +680,33 @@ export function FixDecisionPage() {
                   <span className="ml-1 inline-block h-5 w-[2px] animate-pulse bg-indigo-400" />
                 )}
               </p>
+
+              {/* Trace expansion - progressive disclosure */}
+              {!isTyping && trace && (
+                <div className="mt-4">
+                  {!showTrace ? (
+                    <button
+                      type="button"
+                      onClick={() => setShowTrace(true)}
+                      className="text-sm text-zinc-500 transition-colors hover:text-zinc-300"
+                    >
+                      See what likely caused this →
+                    </button>
+                  ) : (
+                    <AnimatePresence>
+                      <motion.div
+                        initial={{ opacity: 0, y: 5 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: 5 }}
+                        transition={{ duration: 0.25, ease: "easeOut" }}
+                        className="rounded-lg bg-zinc-800/50 px-4 py-3"
+                      >
+                        <p className="text-sm leading-relaxed text-zinc-400">{trace}</p>
+                      </motion.div>
+                    </AnimatePresence>
+                  )}
+                </div>
+              )}
             </div>
           ) : (
             <div className="rounded-2xl border border-dashed border-zinc-800 bg-zinc-900/30 px-6 py-8">

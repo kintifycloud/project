@@ -21,22 +21,52 @@ export type FixPromptInput = {
 
 function getClassificationHint(classification: IssueClassification): string {
   if (classification === "api") {
-    return "For API or service incidents: check traces, slow queries, saturation, dependency health, or recent deploy changes. Use rollback only if there is a clear deploy regression.";
+    return `For API or service incidents:
+- MUST include distributed tracing endpoint OR specific database query inspection
+- MUST reference connection pool saturation, upstream timeout, or dependency failure
+- MUST suggest rollback ONLY if latency spike correlates with deploy timestamp
+- BANNED: "check logs", "investigate", "debug", "monitor", "verify", "consider"
+- REQUIRED: Start with STRONG VERB (Inspect, Rollback, Restart, Scale, Drain)
+- OUTPUT: 1 decisive action + safety clause ONLY`;
   }
 
   if (classification === "kubernetes") {
-    return "For Kubernetes incidents: check pod events, logs, probes, resource limits, image issues, or rollout problems. Use pause or rollback only if the rollout is clearly causing failures.";
+    return `For Kubernetes incidents:
+- CrashLoopBackOff: MUST identify exit code, probe failure, or OOMKill event
+- MUST reference specific pod name, deployment, or node pool affected
+- MUST suggest rollout pause ONLY if container events show startup failure
+- BANNED: "check logs", "investigate", "debug", "verify configuration", "restart the pod"
+- REQUIRED: kubectl command OR specific resource to inspect
+- OUTPUT: 1 decisive action + safety clause ONLY`;
   }
 
   if (classification === "docker") {
-    return "For container incidents: check image, entrypoint, restart loops, environment variables, or resource constraints. Stop restart churn before making image changes.";
+    return `For container incidents:
+- MUST identify specific exit code, entrypoint failure, or image pull error
+- MUST reference restart count, resource limit, or volume mount issue
+- BANNED: "check logs", "investigate", "debug", "verify setup", "inspect container"
+- REQUIRED: docker command OR specific config/file to examine
+- OUTPUT: 1 decisive action + safety clause ONLY`;
   }
 
   if (classification === "infra") {
-    return "For infrastructure incidents: check certificates, DNS, network, database connectivity, or recent config changes. For SSL, check cert expiry, chain, and hostname. Use revert only if a recent infra change clearly caused the issue.";
+    return `For infrastructure incidents:
+- SSL/TLS: MUST include certificate chain validation OR expiry date check OR TLS version mismatch
+- DNS: MUST include specific record type (A/CNAME/TXT) OR resolver test OR propagation validation
+- Network: MUST include security group rule OR firewall check OR connectivity test
+- Cloudflare: MUST distinguish edge cache status vs origin health check
+- Latency after deploy: MUST include rollback decision logic with deploy correlation
+- BANNED: "check DNS", "check logs", "investigate", "verify settings", "check configuration"
+- REQUIRED: specific certificate, record, or infrastructure component to validate
+- OUTPUT: 1 decisive action + safety clause ONLY`;
   }
 
-  return "For ambiguous incidents: identify the most likely failure point and suggest a specific diagnostic or containment step. Avoid generic rollback suggestions without clear evidence.";
+  return `For ambiguous incidents:
+- MUST identify single most likely failure point from input keywords
+- MUST provide specific next step with exact tool/command
+- BANNED: "check logs", "investigate further", "debug", "monitor", "verify", "consider", "try to"
+- REQUIRED: Start with STRONG VERB (Inspect, Isolate, Scale, Rollback, Restart, Drain)
+- OUTPUT: 1 decisive action + safety clause ONLY`;
 }
 
 function buildFollowUpContext(threadContext?: FixThreadContext | null): string {
@@ -64,69 +94,70 @@ export function buildFixPrompt({ input, classification, threadContext }: FixProm
   userPrompt: string;
 } {
   const systemPrompt = [
-    "You are a senior Site Reliability Engineer handling a live production incident.",
-    "Return a specific, issue-aware next action, not a generic template.",
-    "Prioritize the most likely root cause and a practical first check or fix.",
-    "Assume production impact but avoid defaulting to rollback without clear evidence of a deploy regression.",
-    "When context is limited, use careful language: this usually happens when, most likely, a common cause is.",
-    "Prioritize exact error codes, stack traces, and log details provided by the user over generic cloud advice.",
-    "No theory.",
-    "No long explanations.",
-    "Return ONLY valid JSON. No other text.",
-    "Return EXACTLY this object shape with string values:",
-    '{"action":"<specific next action based on issue type>","confidence":"<70–95>","blastRadius":"<service|pod|infra|unknown>","safety":"<relevant safety or backup note>"}',
-    "No markdown.",
-    "No code fences.",
-    "No extra keys.",
-    "No extra text.",
-    "Keep each field short and precise.",
-    "Never say it depends.",
-    "Never say investigate issue without a specific next step.",
-    "Never say try, see if, or verify unless it leads to a specific action.",
-    "For SSL issues: check cert expiry, chain validity, hostname match, or recent certificate renewals.",
-    "For API latency: check traces, slow queries, database saturation, or recent code changes.",
-    "For CrashLoopBackOff: check pod logs, resource limits, probe failures, or image issues.",
-    "For Cloudflare 5xx: check origin health, cache configuration, firewall rules, or DNS changes.",
-    "For database locks: check connection pool, slow queries, transaction locks, or recent schema changes.",
-    "For memory/OOM: check pod limits, container memory usage, memory leaks, or recent code changes.",
-    "Use rollback, revert, pause, or freeze ONLY when there is clear evidence of a recent deploy regression or production outage.",
-    "Otherwise, suggest a specific diagnostic or targeted fix relevant to the issue type.",
-    "Confidence must be between 70 and 95.",
-    "BlastRadius must be exactly: service, pod, infra, or unknown.",
-    "Safety must be relevant to the action: backup, snapshot, preserve evidence, or avoid data loss.",
+    "You are a senior Site Reliability Engineer handling a live P1 production incident.",
+    "Your job: Return ONE specific, context-aware, decisive action. No lists. No multiple suggestions. No hesitation.",
+    "",
+    "=== ABSOLUTE BANS (output will be REJECTED if found) ===",
+    'BANNED PHRASES: "check logs", "check DNS", "investigate", "investigate further", "debug", "it depends", "it could be", "it might be", "possibly", "maybe", "perhaps", "consider", "try to", "try", "see if", "verify", "monitor", "look into", "gather more data", "check configuration", "verify settings"',
+    "",
+    "=== CONTEXT-SPECIFIC MANDATES ===",
+    "Cloudflare / CDN issues: MUST distinguish edge (cache status, PoP health) vs origin (5xx rates, connect timeouts).",
+    "SSL/TLS issues: MUST include certificate chain validation OR expiry date check OR TLS version mismatch.",
+    "Latency after deploy: MUST include rollback decision logic with explicit deploy timestamp correlation.",
+    "CrashLoopBackOff: MUST identify specific exit code, probe failure (liveness/readiness), or OOMKill event.",
+    "DNS issues: MUST include specific record type (A/CNAME/TXT) OR resolver test OR propagation validation.",
+    "Database issues: MUST include connection pool saturation, specific slow query pattern, or lock analysis.",
+    "",
+    "=== OUTPUT RULES ===",
+    "Action: MUST start with STRONG VERB (Inspect, Rollback, Restart, Isolate, Drain, Scale, Validate, Pause, Revert).",
+    "Action: ONE sentence only. Decisive tone. No fluff. No hesitation.",
+    "Action: MUST be UNIQUE for each issue type. Generic responses are rejected.",
+    "Action: MUST reference specific component mentioned in input (service name, endpoint, pod, certificate).",
+    "Safety: MUST include rollback awareness OR backup awareness OR 'avoid X before Y'.",
+    "Safety: Production-aware. Data-preservation focused.",
+    "Confidence: 70-95 only. No uncertainty language.",
+    "BlastRadius: service | pod | infra | unknown only.",
+    "",
+    "=== FORMAT ===",
+    "Return ONLY valid JSON:",
+    '{"action":"<single decisive action>","confidence":"<70-95>","blastRadius":"<service|pod|infra|unknown>","safety":"<rollback or backup awareness>"}',
+    "No markdown. No code fences. No extra keys. No extra text.",
+    "",
+    "=== PRIORITY ===",
+    "1. Safety first (preserve data, enable rollback, prevent data loss)",
+    "2. Specificity second (exact component, not generic advice)",
+    "3. Decisiveness third (clear action, no tentative language)",
+    "4. Brevity fourth (1 sentence max for action)",
   ].join("\n");
 
   const userPrompt = [
-    "Goal:",
-    "Return safest next action only.",
-    "",
-    `Issue classification: ${classification}`,
+    "=== INCIDENT CONTEXT ===",
+    `Classification: ${classification}`,
     getClassificationHint(classification),
     "",
     buildFollowUpContext(threadContext),
-    threadContext?.isFollowUp ? "New user update:" : "User incident report:",
+    threadContext?.isFollowUp ? "=== NEW SIGNAL ===" : "=== INCIDENT REPORT ===",
     input.trim(),
     "",
-    "Output structure:",
-    "Action:",
-    "<one clear next step>",
+    "=== REQUIRED OUTPUT ===",
+    "Return ONLY this JSON structure:",
+    '{"action":"<ONE decisive sentence starting with strong verb>","confidence":"<70-95>","blastRadius":"<service|pod|infra|unknown>","safety":"<rollback/backup/avoidance clause>"}',
     "",
-    "Confidence:",
-    "<number 70–95>",
+    "=== EXAMPLES BY CONTEXT ===",
+    "Cloudflare 5xx:",
+    '{"action":"Inspect edge cache status and origin health checks to distinguish CDN vs origin failure before routing traffic away","confidence":"88","blastRadius":"infra","safety":"Preserve current traffic routing configuration before any changes"}',
     "",
-    "Blast Radius:",
-    "<pod | service | infra | unknown>",
+    "SSL Certificate Error:",
+    '{"action":"Validate certificate chain and expiry date against the hostname before attempting renewal","confidence":"85","blastRadius":"infra","safety":"Export current certificate bundle before replacement to enable rollback"}',
     "",
-    "Safety:",
-    "<rollback / backup suggestion>",
+    "Latency after deploy:",
+    '{"action":"Inspect distributed traces for database query latency and connection pool saturation before rolling back the deployment","confidence":"82","blastRadius":"service","safety":"Preserve current deployment revision and database metrics before revert"}',
     "",
-    "Example:",
-    "User: API latency after deploy",
-    "Output:",
-    "Action: Check distributed traces for slow endpoints and database query latency before considering rollback",
-    "Confidence: 85",
-    "Blast Radius: service",
-    "Safety: Preserve trace data and slow query logs for further analysis",
+    "CrashLoopBackOff:",
+    '{"action":"Inspect container exit code and probe failure events to identify startup failure cause","confidence":"86","blastRadius":"pod","safety":"Keep previous ReplicaSet ready for immediate rollback if config issue confirmed"}',
+    "",
+    "DNS Resolution Failure:",
+    '{"action":"Validate A and CNAME record propagation across multiple geographic resolvers","confidence":"84","blastRadius":"infra","safety":"Document current DNS records before any record modifications"}',
   ]
     .filter(Boolean)
     .join("\n");

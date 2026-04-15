@@ -7,9 +7,75 @@ type RewriteContext = {
   safety: string;
 };
 
-const GENERIC_PHRASES_TO_REMOVE = [
+// === STRICTLY BANNED PHRASES - ANY OUTPUT CONTAINING THESE IS REJECTED ===
+const BANNED_PHRASES = [
   "check logs",
+  "check DNS",
+  "check dns",
   "investigate",
+  "investigate further",
+  "debug",
+  "debug further",
+  "it depends",
+  "it could be",
+  "it might be",
+  "might be",
+  "maybe",
+  "perhaps",
+  "possibly",
+  "consider",
+  "try to",
+  "try",
+  "look into",
+  "see if",
+  "verify",
+  "monitor",
+  "check everything",
+  "check all",
+  "best practices",
+  "standard procedures",
+  "should be",
+  "gather more data",
+  "gather more information",
+];
+
+// === WEAK PHRASES TO REPLACE WITH SPECIFIC ALTERNATIVES ===
+const _WEAK_PHRASE_REPLACEMENTS: Record<string, string[]> = {
+  "check logs": [
+    "inspect container startup logs before redeploying",
+    "examine recent error entries in the failing component",
+    "review crash output from previous container runs",
+  ],
+  "check DNS": [
+    "verify DNS resolution across multiple resolvers before making further changes",
+    "validate A and CNAME record propagation across geographic resolvers",
+    "test name resolution from different network segments and edge locations",
+  ],
+  investigate: [
+    "inspect specific error patterns in the failing component",
+    "examine the failing component directly for root cause",
+    "trace the request path to identify the exact bottleneck",
+  ],
+  "look into": [
+    "inspect the specific configuration for misalignment",
+    "examine the affected component for anomalies",
+  ],
+  "see if": [
+    "verify that the configuration",
+    "confirm whether the component",
+  ],
+  verify: [
+    "validate the configuration before proceeding",
+    "confirm the state matches expected baseline",
+  ],
+  monitor: [
+    "observe metrics during the operation window",
+    "track performance indicators while changes propagate",
+  ],
+};
+
+// === PHRASES TO COMPLETELY REMOVE ===
+const _PHRASES_TO_REMOVE = [
   "it depends",
   "try to",
   "might be",
@@ -17,21 +83,70 @@ const GENERIC_PHRASES_TO_REMOVE = [
   "perhaps",
   "possibly",
   "consider",
-  "look into",
-  "see if",
-  "verify",
-  "monitor",
   "check everything",
+  "check all",
   "best practices",
   "standard procedures",
+  "it could be",
+  "it might be",
+  "should be",
+  "gather more data",
+  "gather more information",
+  "first",
+  "then",
+  "next",
+  "after that",
+  "finally",
 ];
+
+// Escape special regex characters
+function escapeRegExp(string: string): string {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function _hasBannedPhrase(text: string): boolean {
+  const lowerText = text.toLowerCase();
+  return BANNED_PHRASES.some((phrase) => lowerText.includes(phrase.toLowerCase()));
+}
 
 function removeGenericPhrases(text: string): string {
   let cleaned = text;
-  for (const phrase of GENERIC_PHRASES_TO_REMOVE) {
-    const regex = new RegExp(`\\b${phrase}\\b`, "gi");
+
+  // Completely remove banned phrases
+  for (const phrase of BANNED_PHRASES) {
+    const escaped = escapeRegExp(phrase);
+    const regex = new RegExp(`\\b${escaped}\\b`, "gi");
     cleaned = cleaned.replace(regex, "");
   }
+
+  // Clean up extra whitespace from removals
+  cleaned = cleaned.replace(/\s+/g, " ").trim();
+
+  return cleaned;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function _replaceWeakPhrases(text: string): string {
+  let cleaned = text;
+
+  // Replace weak phrases with specific alternatives where available
+  for (const [weakPhrase, alternatives] of Object.entries(_WEAK_PHRASE_REPLACEMENTS)) {
+    if (alternatives.length === 0) continue;
+    const escaped = escapeRegExp(weakPhrase);
+    const regex = new RegExp(`\\b${escaped}\\b`, "gi");
+    // Pick first alternative (could be randomized in future)
+    const replacement = alternatives[0] ?? "";
+    cleaned = cleaned.replace(regex, replacement);
+  }
+
+  // Remove phrases that should be completely eliminated
+  for (const phrase of _PHRASES_TO_REMOVE) {
+    const escaped = escapeRegExp(phrase);
+    const regex = new RegExp(`\\b${escaped}\\b`, "gi");
+    cleaned = cleaned.replace(regex, "");
+  }
+
   return cleaned.replace(/\s+/g, " ").trim();
 }
 

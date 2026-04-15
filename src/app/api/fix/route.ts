@@ -7,6 +7,7 @@ import { VAGUE_INPUT_DECISION, toStrictDecision, type FixDecision } from '@/lib/
 import { type FixThreadContext, type FixThreadTurn } from '@/lib/fixPrompt';
 import { assertHighQuality } from '@/lib/qualityCheck';
 import { rewriteDecisionToNaturalText } from '@/lib/outputRewriter';
+// import { buildTracePrompt } from '@/lib/tracePrompt'; // Unused - reserved for future trace feature
 
 type ProviderName = "gemini" | "deepseek" | "mistral" | "openrouter";
 
@@ -55,46 +56,103 @@ function getRateLimitResponse(request: Request): Response | null {
 function buildEmergencyDecision(classification: IssueClassification): FixDecision {
   if (classification === 'api') {
     return {
-      action: 'Check distributed traces for slow endpoints and database query latency before considering a deploy rollback',
+      action: 'Inspect distributed traces for slow endpoints and database connection pool saturation before rolling back the deployment',
       confidence: '82',
       blastRadius: 'service',
-      safety: 'Preserve trace data and slow query logs for further analysis',
+      safety: 'Preserve current deployment revision and distributed trace data before revert',
     };
   }
 
   if (classification === 'kubernetes') {
     return {
-      action: 'Check pod events, logs, and probe failures to identify why pods are crashing before pausing the rollout',
+      action: 'Inspect pod events for exit codes, probe failures, or OOMKill events to identify startup failure cause',
       confidence: '80',
       blastRadius: 'pod',
-      safety: 'Keep the previous ReplicaSet ready if you need to rollback',
+      safety: 'Keep previous ReplicaSet ready for immediate rollback if config issue confirmed',
     };
   }
 
   if (classification === 'docker') {
     return {
-      action: 'Check container logs for entrypoint errors or resource limits causing restart loops before replacing the image',
+      action: 'Inspect container exit code and restart count to identify entrypoint failure or resource constraint',
       confidence: '78',
       blastRadius: 'pod',
-      safety: 'Preserve the current container config and environment variables for comparison',
+      safety: 'Preserve current container configuration and environment variables before image replacement',
     };
   }
 
   if (classification === 'infra') {
     return {
-      action: 'Check certificate expiry, chain validity, and DNS resolution before reverting infrastructure changes',
+      action: 'Inspect certificate chain validity and DNS record propagation before reverting infrastructure changes',
       confidence: '81',
       blastRadius: 'infra',
-      safety: 'Preserve current certificate bundle and DNS records before making changes',
+      safety: 'Export current certificate bundle and DNS records before any modifications',
     };
   }
 
   return {
-    action: 'Check logs, error messages, and recent changes to identify the most likely failure point before taking action',
+    action: 'Inspect error patterns and recent configuration changes to identify the specific failure point',
     confidence: '74',
     blastRadius: 'unknown',
-    safety: 'Preserve logs and configuration snapshots before making changes',
+    safety: 'Document current state and preserve configuration snapshots before any changes',
   };
+}
+
+// Build contextual trace based on classification and input
+function buildContextualTrace(
+  classification: IssueClassification,
+  input: string,
+  _action: string
+): string {
+  // Context: _action parameter reserved for future trace context enrichment
+  void _action;
+  const lowerInput = input.toLowerCase();
+
+  // API/Latency specific traces
+  if (classification === 'api' || lowerInput.includes('latency') || lowerInput.includes('slow')) {
+    if (lowerInput.includes('deploy') || lowerInput.includes('after')) {
+      return 'Recent deployment likely introduced inefficient queries or resource contention, causing response time degradation under production load.';
+    }
+    if (lowerInput.includes('database') || lowerInput.includes('query')) {
+      return 'Database query patterns likely changed, causing increased response times and potential connection pool exhaustion.';
+    }
+    return 'Recent changes likely affected API response patterns, causing increased latency under production load conditions.';
+  }
+
+  // Kubernetes/CrashLoopBackOff traces
+  if (classification === 'kubernetes' || lowerInput.includes('crashloop') || lowerInput.includes('oom')) {
+    if (lowerInput.includes('config') || lowerInput.includes('probe')) {
+      return 'Configuration changes likely triggered probe failures or startup errors, causing the container to repeatedly restart.';
+    }
+    if (lowerInput.includes('resource') || lowerInput.includes('memory') || lowerInput.includes('oom')) {
+      return 'Resource constraints likely caused the container to exceed memory limits, triggering OOMKilled events and restart cycles.';
+    }
+    return 'Container configuration changes likely triggered startup failures, resulting in repeated restart cycles under health checks.';
+  }
+
+  // Docker traces
+  if (classification === 'docker') {
+    if (lowerInput.includes('image') || lowerInput.includes('pull')) {
+      return 'Image changes likely introduced entrypoint failures or missing dependencies during container initialization.';
+    }
+    return 'Container configuration or image updates likely introduced compatibility issues during startup.';
+  }
+
+  // Infrastructure/DNS/SSL traces
+  if (classification === 'infra') {
+    if (lowerInput.includes('ssl') || lowerInput.includes('tls') || lowerInput.includes('cert')) {
+      return 'Certificate changes likely caused TLS handshake failures or validation errors, blocking secure connections.';
+    }
+    if (lowerInput.includes('dns') || lowerInput.includes('resolve')) {
+      return 'DNS record changes likely caused resolution failures or propagation delays, preventing service connectivity.';
+    }
+    if (lowerInput.includes('cloudflare') || lowerInput.includes('cdn')) {
+      return 'Edge configuration changes likely caused cache misses or origin connectivity issues, affecting request routing.';
+    }
+    return 'Infrastructure changes likely caused connectivity or configuration validation issues between services.';
+  }
+
+  return 'Recent system changes likely triggered the observed failure pattern.';
 }
 
 function toThreadText(value: unknown, maxLength: number): string {
@@ -301,6 +359,7 @@ export async function POST(req: Request) {
     if (classification.isVague) {
       const decision = toStrictDecision(VAGUE_INPUT_DECISION);
       const naturalText = rewriteDecisionToNaturalText(decision);
+      const traceText = buildContextualTrace(classification.type, input, decision.action);
       saveFixHistory(input, naturalText, "openrouter");
 
       // Increment usage count in Supabase on successful vague input fallback response
@@ -338,6 +397,7 @@ export async function POST(req: Request) {
 
       return Response.json({
         answer: naturalText,
+        trace: traceText,
       }, {
         status: 200,
         headers: {
@@ -357,8 +417,11 @@ export async function POST(req: Request) {
         input,
         classification: classification.type,
       });
-      const decision = assertHighQuality(toStrictDecision(routed.decision));
+      const decision = assertHighQuality(toStrictDecision(routed.decision), input);
       const naturalText = rewriteDecisionToNaturalText(decision);
+
+      // Generate trace summary
+      const traceText = buildContextualTrace(classification.type, input, decision.action);
 
       console.log(`[Fix API] Using provider ${routed.provider}`);
       saveFixHistory(input, naturalText, routed.provider);
@@ -399,6 +462,7 @@ export async function POST(req: Request) {
 
       return Response.json({
         answer: naturalText,
+        trace: traceText,
       }, {
         status: 200,
         headers: {
@@ -409,8 +473,9 @@ export async function POST(req: Request) {
       });
     } catch (error) {
       const fallbackDecision = buildEmergencyDecision(classification.type);
-      const safeDecision = assertHighQuality(toStrictDecision(fallbackDecision));
+      const safeDecision = assertHighQuality(toStrictDecision(fallbackDecision), input);
       const naturalText = rewriteDecisionToNaturalText(safeDecision);
+      const traceText = buildContextualTrace(classification.type, input, safeDecision.action);
       const message = error instanceof Error ? error.message : String(error);
 
       console.log(`[Fix API] Falling back to emergency decision: ${message}`);
@@ -452,6 +517,7 @@ export async function POST(req: Request) {
 
       return Response.json({
         answer: naturalText,
+        trace: traceText,
       }, {
         status: 200,
         headers: {

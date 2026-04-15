@@ -52,6 +52,14 @@ export function FixNavbar() {
           <span className="hidden lg:inline-flex rounded-full border border-indigo-500/30 bg-indigo-500/10 px-2.5 py-0.5 font-mono text-[11px] text-indigo-400">
             Intelligence Active
           </span>
+          {/* History Link */}
+          <Link
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            href={"/history" as any}
+            className="px-3 py-1.5 rounded-md text-sm font-medium text-zinc-400 transition-colors hover:text-white hover:bg-zinc-800/50"
+          >
+            History
+          </Link>
         </div>
 
         {/* Mobile Menu Button */}
@@ -83,6 +91,14 @@ export function FixNavbar() {
                 {link.label}
               </Link>
             ))}
+            <Link
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              href={"/history" as any}
+              className="px-3 py-2 rounded-md text-sm text-zinc-400 transition-colors hover:text-white hover:bg-zinc-800/50"
+              onClick={() => setMobileMenuOpen(false)}
+            >
+              History
+            </Link>
             <span className="px-3 py-2 rounded-full border border-indigo-500/30 bg-indigo-500/10 font-mono text-[11px] text-indigo-400 inline-flex items-center gap-2 w-fit">
               <span className="h-1.5 w-1.5 rounded-full bg-indigo-400" />
               Intelligence Active
