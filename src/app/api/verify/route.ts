@@ -1,82 +1,57 @@
 import { NextResponse } from "next/server";
 
 import { openai } from "@/lib/llm";
-import { clampConfidence, isVerifyResult, safeParseJson } from "@/lib/verify";
+import { buildVerifyPrompt, type VerifyResponse } from "@/lib/verifyPrompt";
 
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const input = (body?.input as string | undefined) || "";
+    const action = (body?.action as string | undefined) || "";
 
-    if (!input || input.trim().length === 0) {
-      console.error("VERIFY API: Empty input received");
-      return NextResponse.json({ error: "Input is required." }, { status: 400 });
+    if (!action || action.trim().length === 0) {
+      console.error("VERIFY API: Empty action received");
+      return NextResponse.json({ error: "Action is required." }, { status: 400 });
     }
 
-    const cleanInput = input.slice(0, 6000);
+    const cleanAction = action.slice(0, 2000);
 
-    console.log("VERIFY API: Starting verification for input:", cleanInput.slice(0, 100));
+    console.log("VERIFY API: Starting verification for action:", cleanAction.slice(0, 100));
 
-    const system =
-      "You are a system verification engine. Determine if a fix is successful based on signals. Return a clear verification result.";
+    const prompt = buildVerifyPrompt(cleanAction);
 
-    const user = `Return ONLY valid JSON. No markdown. No extra text.
-
-Required output format:
-{
-  "status": "verified" | "unstable" | "failed",
-  "result": "string",
-  "signals": ["string"],
-  "method": "string",
-  "confidence": number
-}
-
-Constraints:
-- status: choose exactly one of verified / unstable / failed
-- signals: list 3-5 concise observations (e.g. service health, error rate, restart count, latency)
-- be concise and clear
-
-Fix description or system state to verify:
-"""
-${cleanInput}
-"""`;
-
-    console.log("VERIFY API: Calling OpenRouter LLM");
+    console.log("VERIFY API: Calling LLM for action verification");
     const res = await openai.chat.completions.create({
       model: "openchat/openchat-7b",
       messages: [
-        { role: "system", content: system },
-        { role: "user", content: user },
+        { role: "user", content: prompt },
       ],
-      temperature: 0.2,
-      max_tokens: 700,
+      temperature: 0.3,
+      max_tokens: 500,
     });
 
     const text = res.choices[0]?.message?.content || "";
 
     console.log("VERIFY API: LLM response received, parsing JSON");
 
+    // Extract JSON from response
     const jsonMatch = text.match(/\{[\s\S]*\}/);
-    const parsed = safeParseJson(jsonMatch ? jsonMatch[0] : "");
-
-    if (isVerifyResult(parsed)) {
-      console.log("VERIFY API: Valid verify result, returning");
-      return NextResponse.json({
-        ...parsed,
-        confidence: clampConfidence(parsed.confidence),
-      });
+    if (!jsonMatch) {
+      console.error("VERIFY API: No JSON found in response");
+      return NextResponse.json({ error: "Invalid response format" }, { status: 500 });
     }
 
-    console.error("VERIFY API: Invalid response format from LLM");
-    return NextResponse.json(
-      {
-        error: "Invalid response format",
-        raw: text,
-      },
-      { status: 200 },
-    );
+    const parsed = JSON.parse(jsonMatch[0]) as VerifyResponse;
+
+    // Validate response structure
+    if (!parsed.riskLevel || !parsed.impact || typeof parsed.safeToExecute !== "boolean" || !parsed.precaution) {
+      console.error("VERIFY API: Invalid response structure");
+      return NextResponse.json({ error: "Invalid response structure" }, { status: 500 });
+    }
+
+    console.log("VERIFY API: Valid verify result, returning");
+    return NextResponse.json(parsed);
   } catch (error) {
     console.error("VERIFY API: Error:", error);
-    return NextResponse.json({ error: "Could not verify system. Please try again." }, { status: 500 });
+    return NextResponse.json({ error: "Could not verify action. Please try again." }, { status: 500 });
   }
 }

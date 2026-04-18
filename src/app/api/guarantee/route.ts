@@ -1,53 +1,31 @@
 import { NextResponse } from "next/server";
 
 import { openai } from "@/lib/llm";
-import { calculateGuaranteeLevel, calculateRegressionRisk, isGuaranteeResult, safeParseJson } from "@/lib/guarantee";
+import { buildGuaranteePrompt, type GuaranteeResponse } from "@/lib/guaranteePrompt";
 
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const input = (body?.input as string | undefined) || "";
+    const action = (body?.action as string | undefined) || "";
 
-    if (!input || input.trim().length === 0) {
-      console.error("GUARANTEE API: Empty input received");
-      return NextResponse.json({ error: "Input is required." }, { status: 400 });
+    if (!action || action.trim().length === 0) {
+      console.error("GUARANTEE API: Empty action received");
+      return NextResponse.json({ error: "Action is required." }, { status: 400 });
     }
 
-    const cleanInput = input.slice(0, 6000);
+    const cleanAction = action.slice(0, 2000);
 
-    console.log("GUARANTEE API: Starting guarantee analysis for input:", cleanInput.slice(0, 100));
+    console.log("GUARANTEE API: Starting safety analysis for action:", cleanAction.slice(0, 100));
 
-    const system =
-      "You are a system reliability assurance engine. Analyze system state and provide guarantee metrics including success probability, regression risk, and stability window.";
+    const prompt = buildGuaranteePrompt(cleanAction);
 
-    const user = `Return ONLY valid JSON. No markdown. No extra text.
-
-Required output format:
-{
-  "successProbability": number (0-100),
-  "regressionRisk": "low" | "medium" | "high",
-  "stabilityWindow": "string (e.g., '24 hours', '48 hours', '72 hours', '7 days', '30 days'),
-  "level": "string (calculated based on success probability)"
-}
-
-Constraints:
-- successProbability: number between 0 and 100 representing likelihood of successful operation
-- regressionRisk: choose exactly one of low / medium / high
-- stabilityWindow: appropriate time window for guaranteed stability (24 hours, 48 hours, 72 hours, 7 days, 30 days)
-- level: descriptive guarantee level based on success probability (e.g., 'Basic Guarantee', 'Moderate Guarantee', 'Strong Guarantee')
-- be concise and clear
-
-System description to analyze:
-${cleanInput}`;
-
-    console.log("GUARANTEE API: Calling OpenRouter LLM");
+    console.log("GUARANTEE API: Calling LLM for safety guarantee");
     const res = await openai.chat.completions.create({
       model: "openchat/openchat-7b",
       messages: [
-        { role: "system", content: system },
-        { role: "user", content: user },
+        { role: "user", content: prompt },
       ],
-      temperature: 0.2,
+      temperature: 0.3,
       max_tokens: 500,
     });
 
@@ -55,29 +33,31 @@ ${cleanInput}`;
 
     console.log("GUARANTEE API: LLM response received, parsing JSON");
 
+    // Extract JSON from response
     const jsonMatch = text.match(/\{[\s\S]*\}/);
-    const parsed = safeParseJson(jsonMatch ? jsonMatch[0] : "");
-
-    if (isGuaranteeResult(parsed)) {
-      console.log("GUARANTEE API: Valid guarantee result, returning");
-      return NextResponse.json(parsed);
+    if (!jsonMatch) {
+      console.error("GUARANTEE API: No JSON found in response");
+      return NextResponse.json({ error: "Invalid response format" }, { status: 500 });
     }
 
-    console.error("GUARANTEE API: Invalid response format from LLM, using fallback");
-    // Fallback to calculated values if LLM response is invalid
-    const successProbability = 75 + Math.floor(Math.random() * 20);
-    const regressionRisk = calculateRegressionRisk(successProbability);
-    const level = calculateGuaranteeLevel(successProbability);
-    const stabilityWindow = level === "Strong Guarantee" ? "7 days" : level === "Moderate Guarantee" ? "72 hours" : "24 hours";
+    const parsed = JSON.parse(jsonMatch[0]) as GuaranteeResponse;
 
-    return NextResponse.json({
-      successProbability,
-      regressionRisk,
-      stabilityWindow,
-      level,
-    });
+    // Validate response structure
+    if (!parsed.rollbackPlan || !parsed.failureImpact || !parsed.protectionLevel) {
+      console.error("GUARANTEE API: Invalid response structure");
+      return NextResponse.json({ error: "Invalid response structure" }, { status: 500 });
+    }
+
+    // Validate protection level
+    if (!["basic", "safe", "strong"].includes(parsed.protectionLevel)) {
+      console.error("GUARANTEE API: Invalid protection level");
+      return NextResponse.json({ error: "Invalid protection level" }, { status: 500 });
+    }
+
+    console.log("GUARANTEE API: Valid guarantee result, returning");
+    return NextResponse.json(parsed);
   } catch (error) {
     console.error("GUARANTEE API: Error:", error);
-    return NextResponse.json({ error: "Could not calculate guarantee. Please try again." }, { status: 500 });
+    return NextResponse.json({ error: "Could not analyze safety guarantee. Please try again." }, { status: 500 });
   }
 }

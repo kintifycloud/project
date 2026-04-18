@@ -26,7 +26,7 @@ export default function HistoryPage() {
   };
 
   const handleReuse = (input: string) => {
-    router.push(`/?input=${encodeURIComponent(input)}`);
+    router.push(`/fix?input=${encodeURIComponent(input)}`);
   };
 
   const toggleExpand = (id: string) => {

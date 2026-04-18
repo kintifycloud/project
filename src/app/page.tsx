@@ -1,29 +1,29 @@
 "use client";
 
-import React, { useState } from "react";
-import { motion } from "framer-motion";
-import Script from "next/script";
+import { useState } from "react";
 import Link from "next/link";
+import Script from "next/script";
+import { motion } from "framer-motion";
 import {
+  Github,
+  Sparkles,
+  Command,
   ArrowRight,
   Terminal,
-  Github,
+  Cpu,
+  Activity,
+  Server,
+  Shield,
+  Zap,
+  ChevronRight,
+  AlertTriangle,
   Search,
   Clock,
-  AlertTriangle,
   BookOpen,
-  Code2,
-  Server,
-  Users,
-  Zap,
-  Activity,
-  Cpu,
-  FileText,
-  Command,
-  Sparkles,
   Workflow,
-  Shield,
-  ChevronRight,
+  FileText,
+  Code2,
+  Users,
 } from "lucide-react";
 
 // ==================== ANIMATION ====================

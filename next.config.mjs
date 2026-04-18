@@ -19,7 +19,6 @@ const nextConfig = {
   poweredByHeader: false,
   compress: true,
   experimental: {
-    typedRoutes: true,
     optimizePackageImports: ["lucide-react"]
   },
   images: {

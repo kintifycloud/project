@@ -1,83 +1,57 @@
 import { NextResponse } from "next/server";
 
 import { openai } from "@/lib/llm";
-import { clampConfidence, isFlowResult, safeParseJson } from "@/lib/flow";
+import { buildFlowPrompt, type FlowResponse } from "@/lib/flowPrompt";
 
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const input = (body?.input as string | undefined) || "";
+    const action = (body?.action as string | undefined) || "";
 
-    if (!input || input.trim().length === 0) {
-      console.error("FLOW API: Empty input received");
-      return NextResponse.json({ error: "Input is required." }, { status: 400 });
+    if (!action || action.trim().length === 0) {
+      console.error("FLOW API: Empty action received");
+      return NextResponse.json({ error: "Action is required." }, { status: 400 });
     }
 
-    const cleanInput = input.slice(0, 6000);
+    const cleanAction = action.slice(0, 2000);
 
-    console.log("FLOW API: Starting flow analysis for input:", cleanInput.slice(0, 100));
+    console.log("FLOW API: Starting execution guidance for action:", cleanAction.slice(0, 100));
 
-    const system =
-      "You are a system behavior analyst. Convert system data into behavior flow, pattern, and risk.";
+    const prompt = buildFlowPrompt(cleanAction);
 
-    const user = `Return ONLY valid JSON. No markdown. No extra text.
-
-Required output format:
-{
-  "flow": ["string", "string", "string", "string", "string"],
-  "pattern": "Reactive" | "Adaptive" | "Unstable" | "Bottlenecked",
-  "risk": "low" | "medium" | "high",
-  "insight": "string",
-  "confidence": number
-}
-
-Constraints:
-- flow: 4-6 concise behavior steps (e.g., Traffic spike, CPU increase, Memory pressure, Scaling delay, Errors)
-- pattern: choose exactly one of Reactive / Adaptive / Unstable / Bottlenecked
-- risk: choose exactly one of low / medium / high
-- be concise and clear
-
-System data/logs to analyze:
-"""
-${cleanInput}
-"""`;
-
-    console.log("FLOW API: Calling OpenRouter LLM");
+    console.log("FLOW API: Calling LLM for execution guidance");
     const res = await openai.chat.completions.create({
       model: "openchat/openchat-7b",
       messages: [
-        { role: "system", content: system },
-        { role: "user", content: user },
+        { role: "user", content: prompt },
       ],
-      temperature: 0.2,
-      max_tokens: 700,
+      temperature: 0.3,
+      max_tokens: 600,
     });
 
     const text = res.choices[0]?.message?.content || "";
 
     console.log("FLOW API: LLM response received, parsing JSON");
 
+    // Extract JSON from response
     const jsonMatch = text.match(/\{[\s\S]*\}/);
-    const parsed = safeParseJson(jsonMatch ? jsonMatch[0] : "");
-
-    if (isFlowResult(parsed)) {
-      console.log("FLOW API: Valid flow result, returning");
-      return NextResponse.json({
-        ...parsed,
-        confidence: clampConfidence(parsed.confidence),
-      });
+    if (!jsonMatch) {
+      console.error("FLOW API: No JSON found in response");
+      return NextResponse.json({ error: "Invalid response format" }, { status: 500 });
     }
 
-    console.error("FLOW API: Invalid response format from LLM");
-    return NextResponse.json(
-      {
-        error: "Invalid response format",
-        raw: text,
-      },
-      { status: 200 },
-    );
+    const parsed = JSON.parse(jsonMatch[0]) as FlowResponse;
+
+    // Validate response structure
+    if (!Array.isArray(parsed.steps) || !Array.isArray(parsed.warnings) || !parsed.rollback) {
+      console.error("FLOW API: Invalid response structure");
+      return NextResponse.json({ error: "Invalid response structure" }, { status: 500 });
+    }
+
+    console.log("FLOW API: Valid flow result, returning");
+    return NextResponse.json(parsed);
   } catch (error) {
     console.error("FLOW API: Error:", error);
-    return NextResponse.json({ error: "Could not analyze flow. Please try again." }, { status: 500 });
+    return NextResponse.json({ error: "Could not generate execution steps. Please try again." }, { status: 500 });
   }
 }

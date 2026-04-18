@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
+import { Navbar } from "@/components/Navbar";
 
 export const metadata: Metadata = {
   title: "Fix Cloud and API Issues | Kintify",
@@ -25,5 +26,10 @@ export const metadata: Metadata = {
 };
 
 export default function FixLayout({ children }: { children: ReactNode }) {
-  return children;
+  return (
+    <>
+      <Navbar />
+      {children}
+    </>
+  );
 }
