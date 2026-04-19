@@ -19,27 +19,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Check session on mount
   useEffect(() => {
+    console.log("[Auth Context] Initializing...");
+    
     const checkSession = async () => {
       if (!supabaseAuth) {
+        console.error("[Auth Context] ERROR: supabaseAuth is null");
         setLoading(false);
         return;
       }
 
+      console.log("[Auth Context] Checking session...");
+
       try {
-        const { data: { user: currentUser } } = await supabaseAuth.auth.getUser();
+        const { data: { user: currentUser }, error } = await supabaseAuth.auth.getUser();
+        
+        if (error) {
+          console.error("[Auth Context] getUser error:", error.message);
+        }
+        
+        console.log("[Auth Context] Current user:", currentUser ? "authenticated" : "not authenticated");
         setUser(currentUser ?? null);
-      } catch {
+      } catch (err) {
+        console.error("[Auth Context] Session check failed:", err);
         setUser(null);
       } finally {
         setLoading(false);
+        console.log("[Auth Context] Initialization complete");
       }
     };
 
     checkSession();
 
     // Listen for auth state changes
+    console.log("[Auth Context] Setting up auth state listener");
     const { data: { subscription } } = supabaseAuth?.auth.onAuthStateChange(
-      (_event, session) => {
+      (event, session) => {
+        console.log("[Auth Context] Auth state changed:", event, session ? "has session" : "no session");
         setUser(session?.user ?? null);
       }
     ) ?? { data: { subscription: null } };
@@ -50,13 +65,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signOut = async () => {
+    console.log("[Auth Context] Signing out...");
     if (!supabaseAuth) return;
     
     try {
-      await supabaseAuth.auth.signOut();
+      const { error } = await supabaseAuth.auth.signOut();
+      if (error) {
+        console.error("[Auth Context] Sign out error:", error.message);
+      } else {
+        console.log("[Auth Context] Sign out successful");
+      }
       setUser(null);
     } catch (error) {
-      console.error("[Auth] Sign out error:", error);
+      console.error("[Auth Context] Sign out error:", error);
     }
   };
 

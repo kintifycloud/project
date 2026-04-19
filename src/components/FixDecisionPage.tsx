@@ -715,7 +715,7 @@ export function FixDecisionPage() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [lastSubmittedInput, loading, result]);
+  }, [lastSubmittedInput, loading, result, submitIssue]);
 
   // STEP 1: Command dropdown visibility based on input
   useEffect(() => {
@@ -883,7 +883,7 @@ export function FixDecisionPage() {
     if (lastSubmittedInput) {
       void submitIssue(`${cmd} ${lastSubmittedInput}`, true);
     }
-  }, [lastSubmittedInput]);
+  }, [lastSubmittedInput, submitIssue]);
 
   async function submitIssue(rawInput: string, isReRun = false) {
     const trimmedInput = rawInput.trim();
