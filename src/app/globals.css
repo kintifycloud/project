@@ -117,3 +117,7 @@ html {
 ::selection {
   background: rgba(99, 102, 241, 0.3);
 }
+
+.aeo-answer {
+  text-wrap: balance;
+}

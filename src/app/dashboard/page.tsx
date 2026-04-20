@@ -11,20 +11,111 @@ import {
   Settings, 
   LogOut, 
   User,
-  ArrowRight
+  ArrowRight,
+  Building2
 } from "lucide-react";
+import { useState } from "react";
 import { useAuth } from "@/lib/auth-context";
+import { hasEnterpriseAccess, readKintifyPlan } from "@/lib/monetization";
+import { supabaseAuth } from "@/lib/supabase-auth";
 
 export default function DashboardPage() {
-  const { user, loading, signOut } = useAuth();
+  const { user, loading, signOut, refreshUser } = useAuth();
   const router = useRouter();
+  const [plan, setPlan] = useState(() => readKintifyPlan());
 
-  // Protect route - redirect to login if not authenticated
   useEffect(() => {
-    if (!loading && !user) {
-      router.push("/login");
+    const syncPlan = () => setPlan(readKintifyPlan());
+    syncPlan();
+    window.addEventListener("storage", syncPlan);
+    window.addEventListener("kintify:plan-change", syncPlan as EventListener);
+    return () => {
+      window.removeEventListener("storage", syncPlan);
+      window.removeEventListener("kintify:plan-change", syncPlan as EventListener);
+    };
+  }, []);
+
+  useEffect(() => {
+    const authClient = supabaseAuth;
+
+    if (loading || user || !authClient) {
+      return;
     }
-  }, [user, loading, router]);
+
+    let isActive = true;
+    const url = new URL(window.location.href);
+    const hasMagicLinkParams = [
+      "access_token",
+      "refresh_token",
+      "token_hash",
+      "code",
+      "type",
+    ].some((key) => url.searchParams.has(key) || url.hash.includes(`${key}=`));
+
+    console.log("[Dashboard] No user found after auth context load; checking auth state", {
+      hasMagicLinkParams,
+      href: window.location.href,
+    });
+
+    const resolveDashboardAccess = async () => {
+      const {
+        data: { user: currentUser },
+        error,
+      } = await authClient.auth.getUser();
+
+      if (!isActive) {
+        return;
+      }
+
+      if (error) {
+        console.error("[Dashboard] getUser error:", error.message);
+      }
+
+      if (currentUser) {
+        console.log("[Dashboard] User found on direct check");
+        await refreshUser();
+        return;
+      }
+
+      if (!hasMagicLinkParams) {
+        console.log("[Dashboard] No auth callback params present; redirecting to login");
+        router.push("/login");
+      }
+    };
+
+    const { data: { subscription } } = authClient.auth.onAuthStateChange((event, session) => {
+      console.log("[Dashboard] Auth state changed:", event, session ? "has session" : "no session");
+
+      if (event === "SIGNED_IN" && session?.user && isActive) {
+        refreshUser().finally(() => {
+          if (isActive) {
+            window.location.href = "/dashboard";
+          }
+        });
+      }
+    });
+
+    void resolveDashboardAccess();
+
+    const redirectTimeout = window.setTimeout(() => {
+      if (!isActive) {
+        return;
+      }
+
+      if (!hasMagicLinkParams) {
+        return;
+      }
+
+      console.log("[Dashboard] Magic link session did not resolve in time; redirecting to login");
+      router.push("/login");
+    }, 5000);
+
+    return () => {
+      isActive = false;
+      window.clearTimeout(redirectTimeout);
+      subscription.unsubscribe();
+    };
+  }, [user, loading, refreshUser, router]);
 
   if (loading) {
     return (
@@ -183,6 +274,22 @@ export default function DashboardPage() {
                 See your past fixes and solutions
               </p>
             </Link>
+
+            {hasEnterpriseAccess(plan) ? (
+              <Link
+                href="/enterprise/dashboard"
+                className="group bg-gradient-to-br from-emerald-600 to-emerald-700 rounded-2xl p-6 hover:shadow-lg hover:shadow-emerald-500/20 transition-all"
+              >
+                <div className="flex items-center justify-between mb-4">
+                  <Building2 className="w-8 h-8 text-white" />
+                  <ArrowRight className="w-5 h-5 text-white/60 group-hover:text-white group-hover:translate-x-1 transition-all" />
+                </div>
+                <h3 className="text-lg font-semibold text-white mb-1">Enterprise</h3>
+                <p className="text-sm text-emerald-200">
+                  Organization dashboard, SLA metrics, and audit logs
+                </p>
+              </Link>
+            ) : null}
           </motion.div>
 
           {/* Mobile Navigation */}

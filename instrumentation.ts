@@ -64,35 +64,35 @@ export async function register() {
     
     // Add debug logging to the exporter
     const originalExport = logExporter.export;
-    logExporter.export = async function(...args: any[]) {
+    logExporter.export = async function(...args: unknown[]) {
       console.log('[OTEL Exporter] Exporting logs...');
       try {
-        const result = await originalExport.apply(logExporter, args as any);
+        const result = await originalExport.apply(logExporter, args as never);
         console.log('[OTEL Exporter] Export successful');
         return result;
       } catch (error) {
         console.error('[OTEL Exporter] Export failed:', error);
         throw error;
       }
-    } as any;
+    } as never;
     
     const originalForceFlush = logExporter.forceFlush;
-    logExporter.forceFlush = async function(...args: any[]) {
+    logExporter.forceFlush = async function(...args: unknown[]) {
       console.log('[OTEL Exporter] Force flushing logs...');
       try {
-        const result = await originalForceFlush.apply(logExporter, args as any);
+        const result = await originalForceFlush.apply(logExporter, args as never);
         console.log('[OTEL Exporter] Force flush successful');
         return result;
       } catch (error) {
         console.error('[OTEL Exporter] Force flush failed:', error);
         throw error;
       }
-    } as any;
+    } as never;
     
     // Configure Logger Provider with resource attributes
     const loggerProvider = new LoggerProvider();
     
-    (loggerProvider as any).addLogRecordProcessor(new SimpleLogRecordProcessor(logExporter));
+    (loggerProvider as LoggerProvider & { addLogRecordProcessor: (processor: unknown) => void }).addLogRecordProcessor(new SimpleLogRecordProcessor(logExporter));
     
     // Set global logger provider AFTER SDK starts
     logs.setGlobalLoggerProvider(loggerProvider);
@@ -101,7 +101,7 @@ export async function register() {
     // Verify the logger is not a ProxyLogger
     const testLogger = logs.getLogger('kintifycloud');
     console.log('[OTEL] Test logger type:', testLogger.constructor.name);
-    console.log('[OTEL] Test logger provider:', (testLogger as any).provider?.constructor.name);
+    console.log('[OTEL] Test logger provider:', (testLogger as { provider?: { constructor: { name: string } } }).provider?.constructor.name);
     
     // Emit a startup log to verify connection
     testLogger.emit({

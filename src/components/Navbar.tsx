@@ -3,12 +3,28 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { ChevronDown, Menu, X } from "lucide-react";
+import { Building2, ChevronDown, Menu, X } from "lucide-react";
+import { TeamSwitcher } from "@/components/TeamSwitcher";
+import { useAuth } from "@/lib/auth-context";
+import { hasEnterpriseAccess, readKintifyPlan } from "@/lib/monetization";
 
 export function Navbar() {
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [developersDropdownOpen, setDevelopersDropdownOpen] = useState(false);
+  const { user } = useAuth();
+  const [plan, setPlan] = useState(() => readKintifyPlan());
+
+  useState(() => {
+    const syncPlan = () => setPlan(readKintifyPlan());
+    syncPlan();
+    window.addEventListener("storage", syncPlan);
+    window.addEventListener("kintify:plan-change", syncPlan as EventListener);
+    return () => {
+      window.removeEventListener("storage", syncPlan);
+      window.removeEventListener("kintify:plan-change", syncPlan as EventListener);
+    };
+  });
 
   const isActive = (path: string) => pathname === path;
 
@@ -66,6 +82,8 @@ export function Navbar() {
             History
           </Link>
 
+          <TeamSwitcher />
+
           {/* Developers Dropdown */}
           <div className="relative">
             <button
@@ -109,12 +127,28 @@ export function Navbar() {
             Pricing
           </Link>
 
+          {hasEnterpriseAccess(plan) ? (
+            <Link
+              href="/enterprise/dashboard"
+              className={`text-sm transition-colors ${
+                isActive("/enterprise/dashboard")
+                  ? "text-white font-semibold"
+                  : "text-zinc-400 hover:text-white"
+              }`}
+            >
+              <span className="inline-flex items-center gap-1.5">
+                <Building2 className="h-3.5 w-3.5" />
+                Enterprise
+              </span>
+            </Link>
+          ) : null}
+
           {/* Sign in */}
           <Link
-            href="/login"
+            href={user ? "/dashboard" : "/login"}
             className="text-sm text-zinc-400 hover:text-white transition-colors"
           >
-            Sign in
+            {user ? "Dashboard" : "Sign in"}
           </Link>
         </nav>
 
@@ -167,6 +201,10 @@ export function Navbar() {
               History
             </Link>
 
+            <div className="px-3 py-2">
+              <TeamSwitcher />
+            </div>
+
             {/* Mobile Developers Section */}
             <div className="mt-2 pt-2 border-t border-zinc-800">
               <p className="px-3 py-1 text-xs font-medium text-zinc-500 uppercase tracking-wider">
@@ -201,11 +239,11 @@ export function Navbar() {
                 Pricing
               </Link>
               <Link
-                href="/login"
+                href={user ? "/dashboard" : "/login"}
                 onClick={() => setMobileMenuOpen(false)}
                 className="block px-3 py-2 rounded-lg text-sm text-zinc-400 hover:text-white transition-colors"
               >
-                Sign in
+                {user ? "Dashboard" : "Sign in"}
               </Link>
             </div>
           </nav>

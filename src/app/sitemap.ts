@@ -2,10 +2,12 @@ import type { MetadataRoute } from "next";
 
 import { blogPosts } from "@/lib/blogPosts";
 import { fixProblems } from "@/lib/fixProblems";
+import { getIssueCatalog } from "@/lib/issueCatalog";
 import { seoEntries } from "@/lib/seoData";
 
-export default function sitemap(): MetadataRoute.Sitemap {
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const baseUrl = "https://kintify.cloud";
+  const issueCatalog = await getIssueCatalog();
 
   const staticRoutes: MetadataRoute.Sitemap = [
     {
@@ -66,6 +68,13 @@ export default function sitemap(): MetadataRoute.Sitemap {
     priority: 0.7,
   }));
 
+  const issueRoutes: MetadataRoute.Sitemap = issueCatalog.allSlugs.map((slug) => ({
+    url: `${baseUrl}/fix/${slug}`,
+    lastModified: new Date(),
+    changeFrequency: "monthly" as const,
+    priority: 0.75,
+  }));
+
   const blogRoutes: MetadataRoute.Sitemap = blogPosts.map((post) => ({
     url: `${baseUrl}/blog/${post.slug}`,
     lastModified: new Date(post.date),
@@ -73,5 +82,19 @@ export default function sitemap(): MetadataRoute.Sitemap {
     priority: 0.65,
   }));
 
-  return [...staticRoutes, ...seoRoutes, ...fixProblemRoutes, ...blogRoutes];
+  // Dedupe by URL in case of slug collisions between issues.ts and fixProblems.ts
+  const allFixRoutes = [...issueRoutes, ...fixProblemRoutes];
+  const seen = new Set<string>();
+  const dedupedFixRoutes = allFixRoutes.filter((r) => {
+    if (seen.has(r.url)) return false;
+    seen.add(r.url);
+    return true;
+  });
+
+  return [
+    ...staticRoutes,
+    ...seoRoutes,
+    ...dedupedFixRoutes,
+    ...blogRoutes,
+  ];
 }

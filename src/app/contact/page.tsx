@@ -69,12 +69,10 @@ export default function ContactPage() {
             className="text-center max-w-4xl mx-auto"
           >
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold leading-tight mb-6">
-              Get in{" "}
-              <span className="gradient-text">touch.</span>
+              Enterprise Sales
             </h1>
             <p className="text-lg sm:text-xl text-gray-400 max-w-2xl mx-auto">
-              Have questions? We&apos;d love to hear from you. Send us a message and we&apos;ll
-              respond as soon as possible.
+              For large-scale organizations, our team is here to help you implement Kintify&apos;s secure processing solutions. Please get in touch with us to discuss your specific needs.
             </p>
           </motion.div>
         </div>

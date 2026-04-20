@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -16,8 +16,36 @@ import {
   Hash,
   MessageSquare,
   FileCode,
+  Crown,
 } from "lucide-react";
-import { saveToHistory } from "@/lib/history";
+import { getKintifyOutputTrustBadge } from "@/lib/aeo";
+import { buildCheckoutUrl } from "@/lib/checkout";
+import { useAuth } from "@/lib/auth-context";
+import {
+  getFreeFixesRemaining,
+  hasProAccess,
+  hasEnterpriseAccess,
+  hasReachedFreeFixLimit,
+  incrementKintifyUsage,
+  KINTIFY_FREE_FIX_LIMIT,
+  readKintifyPlan,
+  readKintifyUsage,
+  shouldShowSoftPaywall,
+  trackMonetizationEvent,
+  type KintifyPlan,
+  type KintifyUsage,
+} from "@/lib/monetization";
+import { useEnterprise } from "@/lib/enterprise-context";
+import { useTeam } from "@/lib/team-context";
+import { createWorkspaceIncident, normalizeError } from "@/lib/team-mode";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 // =============================================================================
 // PRO UX CONSTANTS & CONFIG
@@ -56,13 +84,10 @@ const INLINE_COMMANDS = [
 ] as const;
 
 const FIX_THREAD_STORAGE_KEY = "kintify.fix.thread";
-const FIX_USAGE_STORAGE_KEY = "kintify.fix.usage.v2";
 const FIX_INPUT_STORAGE_KEY = "kintify.fix.input";
 const FIX_INPUT_HISTORY_KEY = "kintify.fix.inputHistory";
 const FIX_BROWSER_ID_KEY = "kintify.browser_id";
 const FIX_FOCUS_MODE_KEY = "kintify.fix.focusMode";
-const FIX_FREE_LIMIT = 5;
-const FIX_USAGE_WINDOW_MS = 60 * 60 * 1000;
 const MAX_INPUT_HISTORY = 10;
 
 // =============================================================================
@@ -90,11 +115,6 @@ type FixRequestBody = {
     recentMessages: FixThreadTurn[];
     isFollowUp: boolean;
   };
-};
-
-type FixUsageState = {
-  count: number;
-  resetAt: number;
 };
 
 // =============================================================================
@@ -181,43 +201,6 @@ function writeFixThreadState(thread: FixThreadState | null) {
     return;
   }
   window.sessionStorage.setItem(FIX_THREAD_STORAGE_KEY, JSON.stringify(thread));
-}
-
-function readFixUsageState(): FixUsageState {
-  if (typeof window === "undefined") {
-    return { count: 0, resetAt: Date.now() + FIX_USAGE_WINDOW_MS };
-  }
-  try {
-    const raw = window.localStorage.getItem(FIX_USAGE_STORAGE_KEY);
-    if (!raw) return { count: 0, resetAt: Date.now() + FIX_USAGE_WINDOW_MS };
-    const parsed = JSON.parse(raw) as { count?: unknown; resetAt?: unknown };
-    const count = Number(parsed.count);
-    const resetAt = Number(parsed.resetAt);
-    const now = Date.now();
-    if (!Number.isFinite(count) || !Number.isFinite(resetAt) || resetAt <= now) {
-      return { count: 0, resetAt: now + FIX_USAGE_WINDOW_MS };
-    }
-    return { count: Math.max(0, Math.floor(count)), resetAt };
-  } catch {
-    return { count: 0, resetAt: Date.now() + FIX_USAGE_WINDOW_MS };
-  }
-}
-
-function writeFixUsageState(state: FixUsageState) {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(FIX_USAGE_STORAGE_KEY, JSON.stringify(state));
-}
-
-function incrementFixUsageState(current: FixUsageState): FixUsageState {
-  const now = Date.now();
-  const active = current.resetAt <= now
-    ? { count: 0, resetAt: now + FIX_USAGE_WINDOW_MS }
-    : current;
-  return { count: active.count + 1, resetAt: active.resetAt };
-}
-
-function forceLimitReachedState(): FixUsageState {
-  return { count: FIX_FREE_LIMIT, resetAt: Date.now() + FIX_USAGE_WINDOW_MS };
 }
 
 function isExplicitNewIssue(input: string): boolean {
@@ -382,10 +365,14 @@ function readFocusMode(): boolean {
 function writeFocusMode(enabled: boolean) {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.setItem(FIX_FOCUS_MODE_KEY, enabled ? "true" : "false");
+    window.localStorage.setItem(FIX_FOCUS_MODE_KEY, enabled ? "1" : "0");
   } catch {
     // Ignore
   }
+}
+
+function getGeneratedConversionStorageKey(slug: string): string {
+  return `kintify.generated.conversion.${slug}`;
 }
 
 // =============================================================================
@@ -624,7 +611,11 @@ function InlineCommandPills({ onSelect, lastInput }: { onSelect: (cmd: string) =
 
 
 export function FixDecisionPage() {
+  const router = useRouter();
   const searchParams = useSearchParams();
+  const { user } = useAuth();
+  const { canCreateIncidents, trackAudit } = useEnterprise();
+  const { activeWorkspace } = useTeam();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [input, setInput] = useState("");
   const [textareaHeight, setTextareaHeight] = useState(120);
@@ -632,10 +623,9 @@ export function FixDecisionPage() {
   const [error, setError] = useState("");
   const [result, setResult] = useState<string | null>(null);
   const [thread, setThread] = useState<FixThreadState | null>(null);
-  const [usageState, setUsageState] = useState<FixUsageState>({
-    count: 0,
-    resetAt: Date.now() + FIX_USAGE_WINDOW_MS,
-  });
+  const [usageState, setUsageState] = useState<KintifyUsage>(() => readKintifyUsage());
+  const [plan, setPlan] = useState<KintifyPlan>(() => readKintifyPlan());
+  const [paywallOpen, setPaywallOpen] = useState(false);
   const [inputGuidance, setInputGuidance] = useState<string | null>(null);
   const [stagedMessageIndex, setStagedMessageIndex] = useState(0);
   const [displayedResult, setDisplayedResult] = useState("");
@@ -668,10 +658,11 @@ export function FixDecisionPage() {
   // STEP 7: Smart Input Memory - Restore from localStorage
   useEffect(() => {
     const nextThread = readFixThreadState();
-    const nextUsageState = readFixUsageState();
+    const nextUsageState = readKintifyUsage();
+    const nextPlan = readKintifyPlan();
     setThread(nextThread);
     setUsageState(nextUsageState);
-    writeFixUsageState(nextUsageState);
+    setPlan(nextPlan);
 
     // Restore saved input
     if (typeof window !== "undefined") {
@@ -686,6 +677,182 @@ export function FixDecisionPage() {
     }
   }, []);
 
+  const handleUpgrade = useCallback((targetPlan: "pro" | "team" = "pro") => {
+    trackMonetizationEvent("checkoutClick");
+    router.push(buildCheckoutUrl(targetPlan));
+  }, [router]);
+
+  const handleMaybeLater = useCallback(() => {
+    setPaywallOpen(false);
+    trackMonetizationEvent("paywallDismiss");
+  }, []);
+
+  const submitIssue = useCallback(async (rawInput: string, isReRun = false) => {
+    const trimmedInput = rawInput.trim();
+
+    if (loading) return;
+
+    if (!trimmedInput) {
+      setInputGuidance("Add logs, error text, or recent changes.");
+      return;
+    }
+
+    // STEP 4: Save to input history
+    if (!isReRun) {
+      addToInputHistory(trimmedInput);
+      setLastSubmittedInput(trimmedInput);
+    }
+
+    const currentUsage = readKintifyUsage();
+    const currentPlan = readKintifyPlan();
+    setUsageState(currentUsage);
+    setPlan(currentPlan);
+
+    if (!hasProAccess(currentPlan) && hasReachedFreeFixLimit(currentUsage)) {
+      setError("");
+      setPaywallOpen(true);
+      trackMonetizationEvent("paywallView");
+      return;
+    }
+
+    const nextGuidance = getInputGuidanceMessage(trimmedInput);
+    if (nextGuidance) {
+      setInputGuidance(nextGuidance);
+      return;
+    }
+
+    // STEP 11: Smart parsing enhancement
+    const inputType = detectInputType(trimmedInput);
+    const enhancedInput = enhanceInputWithContext(trimmedInput, inputType);
+
+    const startsNewThread = shouldStartNewThread(trimmedInput, thread);
+    const threadPayload = buildThreadPayload(trimmedInput, thread);
+
+    setLoading(true);
+    setError("");
+    setInputGuidance(null);
+    setResult(null);
+    setHasSubmitted(true);
+
+    if (startsNewThread) {
+      setThread(null);
+      writeFixThreadState(null);
+    }
+
+    try {
+      // STEP 9: Latency optimization - warm connection
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+      const response = await fetch("/api/fix", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Kintify-Priority": hasProAccess(currentPlan) ? "true" : "false",
+          "X-Kintify-Enterprise": hasEnterpriseAccess(currentPlan) ? "true" : "false",
+        },
+        body: JSON.stringify({
+          input: enhancedInput,
+          browserId,
+          priority: hasProAccess(currentPlan),
+          enterprise: hasEnterpriseAccess(currentPlan),
+          ...(threadPayload ? { thread: threadPayload } : {}),
+        } satisfies FixRequestBody & { browserId: string; priority: boolean; enterprise: boolean }),
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+
+      const data = (await response.json().catch(() => null)) as unknown;
+
+      if (!response.ok) {
+        const message =
+          data && typeof data === "object" && "error" in data && typeof (data as { error?: unknown }).error === "string"
+            ? (data as { error: string }).error
+            : "Couldn't analyze this — try simplifying the issue";
+
+        if (message === "Free limit reached") {
+          const limitedState = {
+            count: KINTIFY_FREE_FIX_LIMIT,
+            month: readKintifyUsage().month,
+          } satisfies KintifyUsage;
+          setUsageState(limitedState);
+          setPaywallOpen(true);
+          trackMonetizationEvent("paywallView");
+        }
+
+        setError(message);
+        return;
+      }
+
+      if (!data || typeof data !== "object" || !("answer" in data) || typeof (data as { answer?: unknown }).answer !== "string") {
+        setError("Couldn't analyze this — try simplifying the issue");
+        return;
+      }
+
+      const nextResult = (data as { answer: string }).answer;
+      const nextTrace = (data as { trace?: string }).trace ?? null;
+      const nextUsageState = hasProAccess(currentPlan)
+        ? currentUsage
+        : incrementKintifyUsage(currentUsage);
+
+      setResult(nextResult);
+      setTrace(nextTrace);
+      setShowTrace(false);
+      setDisplayedResult("");
+      setUsageState(nextUsageState);
+      trackMonetizationEvent("fixSuccess");
+
+      if (user && !canCreateIncidents) {
+        setError("Your enterprise role is read-only in this organization.");
+      } else if (user) {
+        try {
+          const incident = await createWorkspaceIncident(user, activeWorkspace.id, currentPlan, {
+            input: trimmedInput,
+            output: nextResult,
+            trace: nextTrace,
+          });
+
+          await trackAudit({
+            action: "fix.generated",
+            incidentId: incident.id,
+            metadata: {
+              input: trimmedInput,
+              workspaceId: activeWorkspace.id,
+              priority: hasEnterpriseAccess(currentPlan) ? "enterprise" : hasProAccess(currentPlan) ? "paid" : "standard",
+            },
+          });
+        } catch (incidentError) {
+          setError(normalizeError(incidentError, "Fix generated, but the incident could not be saved."));
+        }
+      }
+
+      const nextThread = threadPayload
+        ? {
+            sessionId: threadPayload.sessionId,
+            originalIssue: threadPayload.originalIssue,
+            previousAnswer: nextResult,
+            recentMessages: [
+              ...threadPayload.recentMessages,
+              { user: trimmedInput, assistant: nextResult },
+            ].slice(-3),
+          } satisfies FixThreadState
+        : {
+            sessionId: createFixSessionId(),
+            originalIssue: trimmedInput,
+            previousAnswer: nextResult,
+            recentMessages: [],
+          } satisfies FixThreadState;
+
+      setThread(nextThread);
+      writeFixThreadState(nextThread);
+    } catch {
+      // STEP 9: Better error UX - keep input intact, show friendly message
+      setError("Couldn't analyze this — try simplifying the issue");
+    } finally {
+      setLoading(false);
+    }
+  }, [loading, thread, browserId, user, activeWorkspace, canCreateIncidents, trackAudit, setInputGuidance, setUsageState, setPlan, setError, setPaywallOpen, setResult, setHasSubmitted, setThread, setTrace, setShowTrace, setDisplayedResult]);
+
   // STEP 2: Global keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -696,7 +863,13 @@ export function FixDecisionPage() {
       }
       
       // Cmd/Ctrl + Enter → Re-run last fix
-      if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && lastSubmittedInput && !loading) {
+      if (
+        (e.metaKey || e.ctrlKey) &&
+        e.key === "Enter" &&
+        lastSubmittedInput &&
+        !loading &&
+        hasProAccess(plan)
+      ) {
         e.preventDefault();
         void submitIssue(lastSubmittedInput, true);
       }
@@ -715,7 +888,7 @@ export function FixDecisionPage() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [lastSubmittedInput, loading, result, submitIssue]);
+  }, [lastSubmittedInput, loading, plan, result, submitIssue]);
 
   // STEP 1: Command dropdown visibility based on input
   useEffect(() => {
@@ -755,6 +928,26 @@ export function FixDecisionPage() {
     if (prefill) {
       setInput(prefill);
     }
+  }, [searchParams]);
+
+  useEffect(() => {
+    const source = searchParams.get("source");
+    if (!source || typeof window === "undefined") {
+      return;
+    }
+
+    const storageKey = getGeneratedConversionStorageKey(source);
+    if (window.sessionStorage.getItem(storageKey)) {
+      return;
+    }
+
+    window.sessionStorage.setItem(storageKey, "1");
+    void fetch("/api/analytics/fix-page", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ slug: source, type: "conversion" }),
+      keepalive: true,
+    }).catch(() => undefined);
   }, [searchParams]);
 
   // STEP 2: Staged loading messages - appear progressively
@@ -880,155 +1073,54 @@ export function FixDecisionPage() {
 
   // STEP 6: Handle inline quick actions
   const handleInlineCommand = useCallback((cmd: string) => {
-    if (lastSubmittedInput) {
+    if (lastSubmittedInput && hasProAccess(plan)) {
       void submitIssue(`${cmd} ${lastSubmittedInput}`, true);
     }
-  }, [lastSubmittedInput, submitIssue]);
+  }, [lastSubmittedInput, plan, submitIssue]);
 
-  async function submitIssue(rawInput: string, isReRun = false) {
-    const trimmedInput = rawInput.trim();
-
-    if (loading) return;
-
-    if (!trimmedInput) {
-      setInputGuidance("Add logs, error text, or recent changes.");
-      return;
-    }
-
-    // STEP 4: Save to input history
-    if (!isReRun) {
-      addToInputHistory(trimmedInput);
-      setLastSubmittedInput(trimmedInput);
-    }
-
-    const currentUsage = readFixUsageState();
-    const localLimitReached = currentUsage.count >= FIX_FREE_LIMIT;
-
-    setUsageState(currentUsage);
-    writeFixUsageState(currentUsage);
-
-    if (localLimitReached) {
-      setError("Free limit reached");
-      return;
-    }
-
-    const nextGuidance = getInputGuidanceMessage(trimmedInput);
-    if (nextGuidance) {
-      setInputGuidance(nextGuidance);
-      return;
-    }
-
-    // STEP 11: Smart parsing enhancement
-    const inputType = detectInputType(trimmedInput);
-    const enhancedInput = enhanceInputWithContext(trimmedInput, inputType);
-
-    const startsNewThread = shouldStartNewThread(trimmedInput, thread);
-    const threadPayload = buildThreadPayload(trimmedInput, thread);
-
-    setLoading(true);
-    setError("");
-    setInputGuidance(null);
-    setResult(null);
-    setHasSubmitted(true);
-
-    if (startsNewThread) {
-      setThread(null);
-      writeFixThreadState(null);
-    }
-
-    try {
-      // STEP 9: Latency optimization - warm connection
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000);
-
-      const response = await fetch("/api/fix", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          input: enhancedInput,
-          browserId,
-          ...(threadPayload ? { thread: threadPayload } : {}),
-        } satisfies FixRequestBody & { browserId: string }),
-        signal: controller.signal,
-      });
-      clearTimeout(timeoutId);
-
-      const data = (await response.json().catch(() => null)) as unknown;
-
-      if (!response.ok) {
-        const message =
-          data && typeof data === "object" && "error" in data && typeof (data as { error?: unknown }).error === "string"
-            ? (data as { error: string }).error
-            : "Couldn't analyze this — try simplifying the issue";
-
-        if (response.status === 429 || message === "Free limit reached") {
-          const limitedState = forceLimitReachedState();
-          setUsageState(limitedState);
-          writeFixUsageState(limitedState);
-        }
-
-        setError(message);
-        return;
-      }
-
-      if (!data || typeof data !== "object" || !("answer" in data) || typeof (data as { answer?: unknown }).answer !== "string") {
-        setError("Couldn't analyze this — try simplifying the issue");
-        return;
-      }
-
-      const nextResult = (data as { answer: string }).answer;
-      const nextTrace = (data as { trace?: string }).trace ?? null;
-      const nextUsageState = incrementFixUsageState(currentUsage);
-
-      setResult(nextResult);
-      setTrace(nextTrace);
-      setShowTrace(false);
-      setDisplayedResult("");
-      setUsageState(nextUsageState);
-      writeFixUsageState(nextUsageState);
-
-      // Save to history
-      const historyItem: { input: string; output: string; trace?: string } = {
-        input: trimmedInput,
-        output: nextResult,
-      };
-      if (nextTrace) {
-        historyItem.trace = nextTrace;
-      }
-      saveToHistory(historyItem);
-
-      const nextThread = threadPayload
-        ? {
-            sessionId: threadPayload.sessionId,
-            originalIssue: threadPayload.originalIssue,
-            previousAnswer: nextResult,
-            recentMessages: [
-              ...threadPayload.recentMessages,
-              { user: trimmedInput, assistant: nextResult },
-            ].slice(-3),
-          } satisfies FixThreadState
-        : {
-            sessionId: createFixSessionId(),
-            originalIssue: trimmedInput,
-            previousAnswer: nextResult,
-            recentMessages: [],
-          } satisfies FixThreadState;
-
-      setThread(nextThread);
-      writeFixThreadState(nextThread);
-    } catch {
-      // STEP 9: Better error UX - keep input intact, show friendly message
-      setError("Couldn't analyze this — try simplifying the issue");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  const hasReachedFreeLimit = usageState.count >= FIX_FREE_LIMIT;
-  const freeFixesLeft = Math.max(FIX_FREE_LIMIT - usageState.count, 0);
+  const hasReachedFreeLimit = !hasProAccess(plan) && hasReachedFreeFixLimit(usageState);
+  const freeFixesLeft = hasProAccess(plan) ? Infinity : getFreeFixesRemaining(usageState);
+  const showSoftPaywall = shouldShowSoftPaywall(usageState, plan) && !loading && !result;
 
   return (
     <main className={`min-h-screen bg-zinc-950 text-zinc-100 transition-all duration-300 ${focusMode ? "fixed inset-0 z-50" : ""}`}>
+      <Dialog open={paywallOpen} onOpenChange={setPaywallOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>You’ve used your free fixes</DialogTitle>
+            <DialogDescription>
+              Upgrade to continue fixing issues instantly.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-4 text-sm text-zinc-300">
+            <p className="font-medium text-white">Kintify Pro unlocks:</p>
+            <ul className="mt-3 space-y-2 text-zinc-400">
+              <li>Unlimited fixes</li>
+              <li>Faster responses with priority routing</li>
+              <li>Full `/history` access</li>
+              <li>Pro UX features like re-run and advanced keyboard flow</li>
+            </ul>
+          </div>
+          <DialogFooter>
+            <button
+              type="button"
+              onClick={handleMaybeLater}
+              className="rounded-xl border border-zinc-700 px-4 py-2.5 text-sm text-zinc-300 transition-colors hover:border-zinc-600 hover:text-white"
+            >
+              Maybe later
+            </button>
+            <button
+              type="button"
+              onClick={() => handleUpgrade("pro")}
+              className="inline-flex items-center gap-2 rounded-xl bg-indigo-500 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-indigo-400"
+            >
+              <Crown className="h-4 w-4" />
+              Upgrade
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <div className={`mx-auto w-full px-4 py-8 sm:px-6 transition-all duration-300 ${focusMode ? "h-screen max-w-none py-4" : "max-w-3xl sm:py-12"}`}>
         {/* Header */}
         <motion.div
@@ -1209,6 +1301,12 @@ export function FixDecisionPage() {
             </div>
           )}
 
+          {showSoftPaywall ? (
+            <div className="mt-3 rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-3 text-sm text-amber-100">
+              1 free fix remaining
+            </div>
+          ) : null}
+
           {/* STEP 9: Error display - keeps input intact */}
           <AnimatePresence>
             {error && (
@@ -1253,7 +1351,7 @@ export function FixDecisionPage() {
               </motion.button>
               
               {/* STEP 3: Re-run button (shown when we have last input) */}
-              {lastSubmittedInput && !loading && (
+              {lastSubmittedInput && !loading && hasProAccess(plan) && (
                 <ReRunButton
                   onClick={() => void submitIssue(lastSubmittedInput, true)}
                   disabled={hasReachedFreeLimit}
@@ -1268,14 +1366,18 @@ export function FixDecisionPage() {
               {/* Keyboard shortcut hint */}
               <span className="hidden text-xs text-zinc-500 sm:block">
                 <kbd className="rounded border border-zinc-700 bg-zinc-800 px-1.5 py-0.5 font-mono">↵</kbd> run
-                <span className="mx-1">·</span>
-                <kbd className="rounded border border-zinc-700 bg-zinc-800 px-1.5 py-0.5 font-mono">Shift↵</kbd> newline
+                {hasProAccess(plan) ? (
+                  <>
+                    <span className="mx-1">·</span>
+                    <kbd className="rounded border border-zinc-700 bg-zinc-800 px-1.5 py-0.5 font-mono">Shift↵</kbd> newline
+                  </>
+                ) : null}
               </span>
               
               <span className="text-xs text-zinc-500">
                 {hasReachedFreeLimit
                   ? "Free limit reached"
-                  : `${freeFixesLeft} free ${freeFixesLeft === 1 ? "fix" : "fixes"} left`}
+                  : `${freeFixesLeft} free ${freeFixesLeft === 1 ? "fix" : "fixes"} left this month`}
               </span>
             </div>
           </div>
@@ -1352,6 +1454,23 @@ export function FixDecisionPage() {
                   )}
                 </p>
 
+                <p className="mt-3 text-xs text-zinc-500">
+                  {getKintifyOutputTrustBadge()}
+                </p>
+
+                {!isTyping && !hasProAccess(plan) ? (
+                  <div className="mt-4 rounded-xl border border-indigo-500/15 bg-indigo-500/[0.05] px-4 py-3 text-sm text-zinc-300">
+                    Saved time debugging this?{" "}
+                    <button
+                      type="button"
+                      onClick={() => handleUpgrade("pro")}
+                      className="font-medium text-indigo-300 underline-offset-4 transition-colors hover:text-indigo-200 hover:underline"
+                    >
+                      Upgrade for unlimited fixes.
+                    </button>
+                  </div>
+                ) : null}
+
                 {/* Trace expansion */}
                 {!isTyping && trace && (
                   <div className="mt-6 pt-4 border-t border-zinc-800/50">
@@ -1393,10 +1512,16 @@ export function FixDecisionPage() {
                 
                 {/* STEP 6: Inline quick action commands */}
                 {!isTyping && lastSubmittedInput && (
-                  <InlineCommandPills
-                    onSelect={handleInlineCommand}
-                    lastInput={lastSubmittedInput}
-                  />
+                  hasProAccess(plan) ? (
+                    <InlineCommandPills
+                      onSelect={handleInlineCommand}
+                      lastInput={lastSubmittedInput}
+                    />
+                  ) : (
+                    <div className="mt-6 rounded-xl border border-zinc-800/70 bg-zinc-900/40 px-4 py-3 text-sm text-zinc-400">
+                      Pro unlocks re-run shortcuts and advanced keyboard flow.
+                    </div>
+                  )
                 )}
               </motion.div>
             )}

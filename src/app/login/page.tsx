@@ -15,8 +15,10 @@ export default function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    const normalizedEmail = email.trim();
+
     console.log("[Magic Link] Starting login process...");
-    console.log("[Magic Link] Email:", email);
+    console.log("[Magic Link] Email:", normalizedEmail);
     console.log("[Magic Link] Window location:", window.location.origin);
     
     if (!supabaseAuth) {
@@ -32,24 +34,20 @@ export default function LoginPage() {
     setMessage(null);
 
     try {
-      // Hardcoded production URL to ensure consistency
-      const redirectUrl = "https://kintify.cloud/dashboard";
-      console.log("[Magic Link] Calling signInWithOtp with redirect:", redirectUrl);
+      console.log("Sending magic link to:", normalizedEmail);
 
-      const { data, error: authError } = await supabaseAuth.auth.signInWithOtp({
-        email,
+      const { error: authError } = await supabaseAuth.auth.signInWithOtp({
+        email: normalizedEmail,
         options: {
-          emailRedirectTo: redirectUrl,
+          emailRedirectTo: "https://kintify.cloud/dashboard",
         },
       });
 
-      console.log("[Magic Link] Response received:", { data, error: authError });
-
       if (authError) {
-        console.error("[Magic Link] ERROR:", authError.message, authError);
+        console.error("Magic link error:", authError.message);
         setError(authError.message);
       } else {
-        console.log("[Magic Link] SUCCESS: Magic link sent successfully");
+        console.log("Magic link requested");
         setMessage("Check your email to continue. We've sent you a magic link.");
         setEmail("");
       }

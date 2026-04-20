@@ -1,19 +1,21 @@
 import { logs } from '@opentelemetry/api-logs';
 import '../../../lib/otel-init';
 import { supabase } from '../../../lib/supabase';
+import { isKeyRateLimited, validateApiKey } from '@/lib/auth';
 import { classifyIssue, type IssueClassification } from '@/lib/classifier';
 import { routeFixDecision } from '@/lib/llmRouter';
 import { VAGUE_INPUT_DECISION, toStrictDecision, type FixDecision } from '@/lib/normalize';
 import { type FixThreadContext, type FixThreadTurn } from '@/lib/fixPrompt';
 import { assertHighQuality } from '@/lib/qualityCheck';
 import { rewriteDecisionToNaturalText } from '@/lib/outputRewriter';
+import { recordQuery, recordQueryResponse } from '@/lib/queryStore';
+import { supabaseAdmin } from '@/lib/supabase-admin';
 // import { buildTracePrompt } from '@/lib/tracePrompt'; // Unused - reserved for future trace feature
 
 type ProviderName = "gemini" | "deepseek" | "mistral" | "openrouter";
 
-const FIX_RATE_LIMIT_MAX_REQUESTS = 5;
+const FIX_RATE_LIMIT_MAX_REQUESTS = 30;
 const FIX_RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
-const FIX_FREE_LIMIT = 5;
 const fixRateLimitStore = new Map<string, { count: number; resetAt: number }>();
 
 function getClientIp(request: Request): string {
@@ -39,7 +41,7 @@ function getRateLimitResponse(request: Request): Response | null {
 
   if (current.count >= FIX_RATE_LIMIT_MAX_REQUESTS) {
     return Response.json({
-      error: 'Free limit reached',
+      error: 'Too many requests. Try again shortly.',
     }, {
       status: 429,
       headers: {
@@ -234,6 +236,33 @@ async function saveFixHistory(userInput: string, aiOutput: string, provider: Pro
   }
 }
 
+async function recordEnterpriseApiAudit(payload: {
+  action: string;
+  userEmail: string;
+  organizationId: string;
+  metadata?: Record<string, unknown>;
+}): Promise<void> {
+  if (!supabaseAdmin) {
+    return;
+  }
+
+  try {
+    const { error } = await supabaseAdmin.from('audit_logs').insert({
+      action: payload.action,
+      organization_id: payload.organizationId,
+      user_id: null,
+      user_email: payload.userEmail,
+      metadata: payload.metadata ?? {},
+    });
+
+    if (error) {
+      console.error('[Enterprise Audit] Failed to record audit log:', error.message);
+    }
+  } catch (error) {
+    console.error('[Enterprise Audit] Error recording audit log:', error);
+  }
+}
+
 export async function POST(req: Request) {
   try {
     const logger = logs.getLogger('kintifycloud');
@@ -251,12 +280,33 @@ export async function POST(req: Request) {
     };
     logger.emit(logRecord);
 
+    const apiKey = req.headers.get('x-api-key');
+    const apiKeyAuth = apiKey ? validateApiKey(apiKey) : null;
+
+    if (apiKey && (!apiKeyAuth || !apiKeyAuth.valid)) {
+      return Response.json({
+        error: apiKeyAuth?.error ?? 'Invalid API key.',
+      }, { status: 401 });
+    }
+
     const body = await req.json();
     const input = body.input?.trim();
-    const browserId = body.browserId?.trim() || '';
     const threadContext = parseThreadContext(body.thread);
 
-    const rateLimitResponse = getRateLimitResponse(req);
+    const isEnterpriseApiRequest = apiKeyAuth?.valid === true && apiKeyAuth.meta.tier === 'enterprise';
+    const isPriorityRequest = req.headers.get('x-kintify-priority') === 'true' || body.priority === true || isEnterpriseApiRequest;
+    const enterpriseUserEmail = req.headers.get('x-enterprise-user-email')?.trim().toLowerCase() || 'enterprise-api@kintify.cloud';
+    const priorityTier = isEnterpriseApiRequest ? 'enterprise' : isPriorityRequest ? 'paid' : 'standard';
+
+    if (apiKeyAuth?.valid) {
+      if (isKeyRateLimited(apiKeyAuth.meta.id, apiKeyAuth.meta.rateLimit)) {
+        return Response.json({
+          error: 'API key rate limit exceeded. Try again shortly.',
+        }, { status: 429 });
+      }
+    }
+
+    const rateLimitResponse = apiKeyAuth?.valid ? null : getRateLimitResponse(req);
     if (rateLimitResponse) {
       logger.emit({
         severityText: 'WARN',
@@ -283,47 +333,7 @@ export async function POST(req: Request) {
       }, { status: 400 });
     }
 
-    // Check Supabase usage limit if browser_id is provided
-    let usageCount = 0;
-    let usageLimitReached = false;
-
-    if (browserId && supabase) {
-      try {
-        const { data, error } = await supabase
-          .from('fix_usage')
-          .select('usage_count')
-          .eq('browser_id', browserId)
-          .maybeSingle();
-
-        if (error) {
-          console.warn('[Supabase] Usage check failed:', error);
-        } else if (data && data.usage_count !== undefined) {
-          usageCount = data.usage_count;
-          if (usageCount >= FIX_FREE_LIMIT) {
-            usageLimitReached = true;
-          }
-        }
-      } catch (error) {
-        console.warn('[Supabase] Usage check error:', error);
-      }
-    }
-
-    if (usageLimitReached) {
-      logger.emit({
-        severityText: 'WARN',
-        body: 'Free limit reached',
-        attributes: {
-          'api.route': '/api/fix',
-          'browser_id': browserId,
-          'usage_count': String(usageCount),
-        },
-      });
-      return Response.json({
-        error: 'Free limit reached',
-      }, {
-        status: 429,
-      });
-    }
+    await recordQuery({ text: input });
 
     if (!process.env.GEMINI_API_KEY && !process.env.DEEPSEEK_API_KEY && !process.env.MISTRAL_API_KEY && !process.env.OPENROUTER_API_KEY) {
       logger.emit({
@@ -360,30 +370,8 @@ export async function POST(req: Request) {
       const decision = toStrictDecision(VAGUE_INPUT_DECISION);
       const naturalText = rewriteDecisionToNaturalText(decision);
       const traceText = buildContextualTrace(classification.type, input, decision.action);
+      await recordQueryResponse(input, naturalText);
       saveFixHistory(input, naturalText, "openrouter");
-
-      // Increment usage count in Supabase on successful vague input fallback response
-      if (browserId && supabase) {
-        try {
-          const { error: upsertError } = await supabase
-            .from('fix_usage')
-            .upsert({
-              browser_id: browserId,
-              usage_count: usageCount + 1,
-              last_used_at: new Date().toISOString(),
-            }, {
-              onConflict: 'browser_id',
-            });
-
-          if (upsertError) {
-            console.warn('[Supabase] Usage increment failed:', upsertError);
-          } else {
-            console.log('[Supabase] Usage incremented successfully for browser:', browserId);
-          }
-        } catch (error) {
-          console.warn('[Supabase] Usage increment error:', error);
-        }
-      }
 
       logger.emit({
         severityText: 'INFO',
@@ -404,6 +392,7 @@ export async function POST(req: Request) {
           'Content-Type': 'application/json',
           'X-Fix-Provider': 'fallback',
           'X-Fix-Classification': classification.type,
+          'X-Kintify-Priority-Tier': priorityTier,
         },
       });
     }
@@ -424,30 +413,8 @@ export async function POST(req: Request) {
       const traceText = buildContextualTrace(classification.type, input, decision.action);
 
       console.log(`[Fix API] Using provider ${routed.provider}`);
+      await recordQueryResponse(input, naturalText);
       saveFixHistory(input, naturalText, routed.provider);
-
-      // Increment usage count in Supabase on successful response
-      if (browserId && supabase) {
-        try {
-          const { error: upsertError } = await supabase
-            .from('fix_usage')
-            .upsert({
-              browser_id: browserId,
-              usage_count: usageCount + 1,
-              last_used_at: new Date().toISOString(),
-            }, {
-              onConflict: 'browser_id',
-            });
-
-          if (upsertError) {
-            console.warn('[Supabase] Usage increment failed:', upsertError);
-          } else {
-            console.log('[Supabase] Usage incremented successfully for browser:', browserId);
-          }
-        } catch (error) {
-          console.warn('[Supabase] Usage increment error:', error);
-        }
-      }
 
       logger.emit({
         severityText: 'INFO',
@@ -456,9 +423,23 @@ export async function POST(req: Request) {
           'api.route': '/api/fix',
           'provider': routed.provider,
           'classification.type': classification.type,
+          'priority.tier': priorityTier,
           'processing.time.ms': String(Date.now() - startTime),
         },
       });
+
+      if (isEnterpriseApiRequest && apiKeyAuth.meta.organizationId) {
+        await recordEnterpriseApiAudit({
+          action: 'fix.api.generated',
+          organizationId: apiKeyAuth.meta.organizationId,
+          userEmail: enterpriseUserEmail,
+          metadata: {
+            classification: classification.type,
+            provider: routed.provider,
+            priorityTier,
+          },
+        });
+      }
 
       return Response.json({
         answer: naturalText,
@@ -469,6 +450,7 @@ export async function POST(req: Request) {
           'Content-Type': 'application/json',
           'X-Fix-Provider': routed.provider,
           'X-Fix-Classification': classification.type,
+          'X-Kintify-Priority-Tier': priorityTier,
         },
       });
     } catch (error) {
@@ -479,30 +461,8 @@ export async function POST(req: Request) {
       const message = error instanceof Error ? error.message : String(error);
 
       console.log(`[Fix API] Falling back to emergency decision: ${message}`);
+      await recordQueryResponse(input, naturalText);
       saveFixHistory(input, naturalText, 'openrouter');
-
-      // Increment usage count in Supabase on successful emergency fallback response
-      if (browserId && supabase) {
-        try {
-          const { error: upsertError } = await supabase
-            .from('fix_usage')
-            .upsert({
-              browser_id: browserId,
-              usage_count: usageCount + 1,
-              last_used_at: new Date().toISOString(),
-            }, {
-              onConflict: 'browser_id',
-            });
-
-          if (upsertError) {
-            console.warn('[Supabase] Usage increment failed:', upsertError);
-          } else {
-            console.log('[Supabase] Usage incremented successfully for browser:', browserId);
-          }
-        } catch (error) {
-          console.warn('[Supabase] Usage increment error:', error);
-        }
-      }
 
       logger.emit({
         severityText: 'WARN',
@@ -511,9 +471,23 @@ export async function POST(req: Request) {
           'api.route': '/api/fix',
           'error.message': message,
           'response.type': 'emergency',
+          'priority.tier': priorityTier,
           'processing.time.ms': String(Date.now() - startTime),
         },
       });
+
+      if (isEnterpriseApiRequest && apiKeyAuth.meta.organizationId) {
+        await recordEnterpriseApiAudit({
+          action: 'fix.api.fallback',
+          organizationId: apiKeyAuth.meta.organizationId,
+          userEmail: enterpriseUserEmail,
+          metadata: {
+            classification: classification.type,
+            priorityTier,
+            error: message,
+          },
+        });
+      }
 
       return Response.json({
         answer: naturalText,
@@ -524,6 +498,7 @@ export async function POST(req: Request) {
           'Content-Type': 'application/json',
           'X-Fix-Provider': 'fallback',
           'X-Fix-Classification': classification.type,
+          'X-Kintify-Priority-Tier': priorityTier,
         },
       });
     }

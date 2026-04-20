@@ -9,15 +9,34 @@ export type ApiKeyMeta = {
   id: string;
   tier: "demo" | "free" | "pro" | "enterprise";
   rateLimit: number; // requests per minute
+  organizationId?: string | null;
 };
 
-const VALID_KEYS: Record<string, ApiKeyMeta> = {
-  "demo-key": {
-    id: "demo",
-    tier: "demo",
-    rateLimit: 60,
-  },
-};
+function buildValidKeys(): Record<string, ApiKeyMeta> {
+  const keys: Record<string, ApiKeyMeta> = {
+    "demo-key": {
+      id: "demo",
+      tier: "demo",
+      rateLimit: 60,
+    },
+  };
+
+  const enterpriseApiKey = process.env.KINTIFY_ENTERPRISE_API_KEY;
+  const enterpriseOrganizationId = process.env.KINTIFY_ENTERPRISE_ORGANIZATION_ID;
+
+  if (enterpriseApiKey) {
+    keys[enterpriseApiKey] = {
+      id: enterpriseOrganizationId ?? "enterprise",
+      tier: "enterprise",
+      rateLimit: 240,
+      organizationId: enterpriseOrganizationId ?? null,
+    };
+  }
+
+  return keys;
+}
+
+const VALID_KEYS: Record<string, ApiKeyMeta> = buildValidKeys();
 
 export type AuthResult =
   | { valid: true; meta: ApiKeyMeta }
