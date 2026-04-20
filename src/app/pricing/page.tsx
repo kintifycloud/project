@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { ArrowRight, CheckCircle2 } from "lucide-react";
 
@@ -13,7 +14,7 @@ const plans = [
     description: "Try Kintify Fix and get value before you pay.",
     features: [
       "5 fixes per month",
-      "Answer-first troubleshooting",
+      "Answer first troubleshooting",
       "Basic history preview",
     ],
     href: "/fix",
@@ -66,7 +67,7 @@ const plans = [
   },
 ] as const;
 
-export default function PricingPage() {
+function PricingPageContent() {
   const searchParams = useSearchParams();
   const checkoutState = searchParams.get("checkout");
   const plan = searchParams.get("plan");
@@ -179,10 +180,19 @@ export default function PricingPage() {
               className="inline-flex items-center gap-2 rounded-xl border border-zinc-700 px-4 py-2.5 text-zinc-300 transition-colors hover:border-zinc-600 hover:text-white"
             >
               Back to /fix
+              <ArrowRight className="h-4 w-4" />
             </Link>
           </div>
         </section>
       </div>
     </main>
+  );
+}
+
+export default function PricingPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <PricingPageContent />
+    </Suspense>
   );
 }

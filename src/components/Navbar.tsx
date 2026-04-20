@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Building2, ChevronDown, Menu, X } from "lucide-react";
 import { TeamSwitcher } from "@/components/TeamSwitcher";
 import { useAuth } from "@/lib/auth-context";
@@ -15,7 +15,8 @@ export function Navbar() {
   const { user } = useAuth();
   const [plan, setPlan] = useState(() => readKintifyPlan());
 
-  useState(() => {
+  useEffect(() => {
+    if (typeof window === "undefined") return;
     const syncPlan = () => setPlan(readKintifyPlan());
     syncPlan();
     window.addEventListener("storage", syncPlan);
@@ -24,7 +25,7 @@ export function Navbar() {
       window.removeEventListener("storage", syncPlan);
       window.removeEventListener("kintify:plan-change", syncPlan as EventListener);
     };
-  });
+  }, []);
 
   const isActive = (path: string) => pathname === path;
 

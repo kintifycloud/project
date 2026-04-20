@@ -1,11 +1,16 @@
 import Link from "next/link";
 
 import { FixProblemCTA } from "@/components/FixProblemCTA";
-import { GeneratedIssueTracker } from "@/components/GeneratedIssueTracker";
+import dynamic from "next/dynamic";
 import {
   getKintifyTrustLine,
   type AeoFaqItem,
 } from "@/lib/aeo";
+
+const GeneratedIssueTracker = dynamic(
+  () => import("@/components/GeneratedIssueTracker").then((mod) => mod.GeneratedIssueTracker),
+  { loading: () => null }
+);
 
 type AeoLink = {
   href: string;

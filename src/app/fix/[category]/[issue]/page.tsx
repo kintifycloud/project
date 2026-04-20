@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
+export const dynamic = "force-dynamic";
+
 import { AeoFixTemplate } from "@/components/AeoFixTemplate";
 import {
   buildAeoActionAnswer,
@@ -11,18 +13,7 @@ import {
   getKintifyAuthorSchema,
 } from "@/lib/aeo";
 import { siteUrl } from "@/lib/schemas";
-import { findEntry, getRelated, seoEntries, type SeoEntry } from "@/lib/seoData";
-
-/* ------------------------------------------------------------------ */
-/*  Static params                                                      */
-/* ------------------------------------------------------------------ */
-
-export function generateStaticParams() {
-  return seoEntries.map((entry) => ({
-    category: entry.category,
-    issue: entry.issue,
-  }));
-}
+import { findEntry, getRelated, type SeoEntry } from "@/lib/seoData";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */

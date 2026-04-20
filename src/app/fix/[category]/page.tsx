@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
+export const dynamic = "force-dynamic";
+
 import { AeoFixTemplate } from "@/components/AeoFixTemplate";
 import {
-  fixProblems,
   findFixProblem,
   getRelatedProblems,
   type FixProblem,
@@ -11,7 +12,7 @@ import {
 import {
   type Issue,
 } from "@/lib/issues";
-import { findCatalogIssue, getCatalogRelatedIssues, getIssueCatalog } from "@/lib/issueCatalog";
+import { findCatalogIssue, getCatalogRelatedIssues } from "@/lib/issueCatalog";
 import {
   buildAeoActionAnswer,
   buildFaqPageSchema,
@@ -21,23 +22,6 @@ import {
   getKintifyAuthorSchema,
 } from "@/lib/aeo";
 import { siteUrl } from "@/lib/schemas";
-
-/* ------------------------------------------------------------------ */
-/*  Static params — pre-render every slug at build time                */
-/* ------------------------------------------------------------------ */
-
-export async function generateStaticParams() {
-  const catalog = await getIssueCatalog();
-  const fromProblems = fixProblems.map((p) => ({ category: p.slug }));
-  const fromIssues = catalog.allSlugs.map((slug) => ({ category: slug }));
-  // Deduplicate in case of collision
-  const seen = new Set<string>();
-  return [...fromIssues, ...fromProblems].filter((entry) => {
-    if (seen.has(entry.category)) return false;
-    seen.add(entry.category);
-    return true;
-  });
-}
 
 /* ------------------------------------------------------------------ */
 /*  JSON-LD for minimal issue pages (FAQ + SoftwareApplication)        */

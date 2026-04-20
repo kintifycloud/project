@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { Suspense } from "react";
 import { ArrowRight, CheckCircle2, Users } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 
@@ -9,7 +10,7 @@ import { useAuth } from "@/lib/auth-context";
 import { useTeam } from "@/lib/team-context";
 import { extractInviteToken } from "@/lib/team-mode";
 
-export default function JoinPage() {
+function JoinPageContent() {
   const searchParams = useSearchParams();
   const { loading: authLoading, user } = useAuth();
   const { joinTeam, loading: teamLoading, teamLocked } = useTeam();
@@ -80,7 +81,7 @@ export default function JoinPage() {
             <div className="flex justify-center">
               <CheckCircle2 className="h-6 w-6" />
             </div>
-            <p className="mt-3 text-sm">You’re in. Your shared incident workspace is ready.</p>
+            <p className="mt-3 text-sm">You&apos;re in. Your shared incident workspace is ready.</p>
             <div className="mt-4 flex justify-center gap-3">
               <Link
                 href="/history"
@@ -100,5 +101,13 @@ export default function JoinPage() {
         ) : null}
       </div>
     </main>
+  );
+}
+
+export default function JoinPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <JoinPageContent />
+    </Suspense>
   );
 }
