@@ -3,11 +3,12 @@
 import Link from "next/link";
 import { useEffect } from "react";
 import { useSearchParams } from "next/navigation";
+import { Suspense } from "react";
 import { CheckCircle2, ArrowRight } from "lucide-react";
 
 import { type KintifyPlan, writeKintifyPlan } from "@/lib/monetization";
 
-export default function CheckoutSuccessPage() {
+function CheckoutSuccessContent() {
   const searchParams = useSearchParams();
   const rawPlan = searchParams.get("plan");
   const plan: KintifyPlan = rawPlan === "enterprise" ? "enterprise" : rawPlan === "team" ? "team" : "pro";
@@ -50,5 +51,13 @@ export default function CheckoutSuccessPage() {
         </div>
       </div>
     </main>
+  );
+}
+
+export default function CheckoutSuccessPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <CheckoutSuccessContent />
+    </Suspense>
   );
 }
