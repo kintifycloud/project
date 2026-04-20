@@ -292,6 +292,8 @@ export async function POST(req: Request) {
     const body = await req.json();
     const input = body.input?.trim();
     const threadContext = parseThreadContext(body.thread);
+    const browserIdRaw = body.browserId?.trim() || req.headers.get('x-kintify-browser-id')?.trim();
+    const browserId = browserIdRaw || undefined;
 
     const isEnterpriseApiRequest = apiKeyAuth?.valid === true && apiKeyAuth.meta.tier === 'enterprise';
     const isPriorityRequest = req.headers.get('x-kintify-priority') === 'true' || body.priority === true || isEnterpriseApiRequest;
@@ -406,7 +408,7 @@ export async function POST(req: Request) {
         input,
         classification: classification.type,
       });
-      const decision = assertHighQuality(toStrictDecision(routed.decision), input);
+      const decision = assertHighQuality(toStrictDecision(routed.decision), input, browserId);
       const naturalText = rewriteDecisionToNaturalText(decision);
 
       // Generate trace summary
@@ -455,7 +457,7 @@ export async function POST(req: Request) {
       });
     } catch (error) {
       const fallbackDecision = buildEmergencyDecision(classification.type);
-      const safeDecision = assertHighQuality(toStrictDecision(fallbackDecision), input);
+      const safeDecision = assertHighQuality(toStrictDecision(fallbackDecision), input, browserId);
       const naturalText = rewriteDecisionToNaturalText(safeDecision);
       const traceText = buildContextualTrace(classification.type, input, safeDecision.action);
       const message = error instanceof Error ? error.message : String(error);

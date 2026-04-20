@@ -42,8 +42,8 @@ const plans = [
     features: [
       "Shared history across your team",
       "Incident status workflows with shareable links",
-      "Multi-user access with owner/member roles",
-      "Team-wide unlimited fixes",
+      "Multi user access with owner/member roles",
+      "Team wide unlimited fixes",
       "Simple invites via email or link",
     ],
     href: buildCheckoutUrl("team"),

@@ -249,12 +249,19 @@ export function qualityCheck(decision: FixDecision, input?: string): QualityChec
   };
 }
 
-// Track recent outputs for duplicate detection
-const recentOutputs = new Set<string>();
+// Track recent outputs for duplicate detection per user
+const userRecentOutputs = new Map<string, Set<string>>();
 const MAX_RECENT_OUTPUTS = 50;
 
-function isDuplicateOutput(action: string): boolean {
+function isDuplicateOutput(action: string, browserId?: string): boolean {
   const normalized = action.toLowerCase().replace(/\s+/g, " ").trim();
+  const userId = browserId || "anonymous";
+  
+  let recentOutputs = userRecentOutputs.get(userId);
+  if (!recentOutputs) {
+    recentOutputs = new Set();
+    userRecentOutputs.set(userId, recentOutputs);
+  }
 
   // Check for exact match
   if (recentOutputs.has(normalized)) {
@@ -282,17 +289,15 @@ function isDuplicateOutput(action: string): boolean {
   return false;
 }
 
-export function assertHighQuality(decision: FixDecision): FixDecision;
-export function assertHighQuality(decision: FixDecision, input: string): FixDecision;
-export function assertHighQuality(decision: FixDecision, input?: string): FixDecision {
+export function assertHighQuality(decision: FixDecision, input?: string, browserId?: string): FixDecision {
   const checkResult = input ? qualityCheck(decision, input) : qualityCheck(decision);
 
   if (!checkResult.ok) {
     throw new Error(`Decision rejected: ${checkResult.reasons.join(",")}`);
   }
 
-  // Additional duplicate detection
-  if (isDuplicateOutput(decision.action)) {
+  // Additional duplicate detection (user-specific)
+  if (isDuplicateOutput(decision.action, browserId)) {
     throw new Error("Decision rejected: duplicate_output");
   }
 
