@@ -4,6 +4,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useS
 
 import { useAuth } from "@/lib/auth-context";
 import { hasTeamAccess, readKintifyPlan, type KintifyPlan } from "@/lib/monetization";
+import { supabaseAuth } from "@/lib/supabase-auth";
 import {
   PERSONAL_WORKSPACE_ID,
   buildPersonalWorkspace,
@@ -41,6 +42,15 @@ export function TeamProvider({ children }: { children: React.ReactNode }) {
 
   const refresh = useCallback(async () => {
     if (!user) {
+      setWorkspaces([buildPersonalWorkspace()]);
+      setActiveWorkspaceId(PERSONAL_WORKSPACE_ID);
+      setLoading(false);
+      return;
+    }
+
+    // Check if Supabase is configured before attempting to load workspace state
+    if (!supabaseAuth) {
+      console.warn("[Team Context] Supabase not configured - using personal workspace");
       setWorkspaces([buildPersonalWorkspace()]);
       setActiveWorkspaceId(PERSONAL_WORKSPACE_ID);
       setLoading(false);

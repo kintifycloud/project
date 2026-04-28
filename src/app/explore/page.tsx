@@ -20,6 +20,9 @@ export const metadata: Metadata = {
   },
 };
 
+// Force dynamic rendering to avoid build-time Supabase fetch issues
+export const dynamic = "force-dynamic";
+
 function formatTimeAgo(timestamp: number): string {
   const seconds = Math.floor((Date.now() - timestamp) / 1000);
   

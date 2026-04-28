@@ -4,6 +4,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useS
 
 import { useAuth } from "@/lib/auth-context";
 import { hasEnterpriseAccess, readKintifyPlan, type KintifyPlan } from "@/lib/monetization";
+import { supabaseAuth } from "@/lib/supabase-auth";
 import {
   buildWeeklyReport,
   createOrganizationWithTeam,
@@ -61,6 +62,14 @@ export function EnterpriseProvider({ children }: { children: React.ReactNode }) 
 
   const refresh = useCallback(async () => {
     if (!user || !hasEnterpriseAccess(plan)) {
+      setState(defaultState);
+      setLoading(false);
+      return;
+    }
+
+    // Check if Supabase is configured before attempting to load enterprise state
+    if (!supabaseAuth) {
+      console.warn("[Enterprise Context] Supabase not configured - enterprise features disabled");
       setState(defaultState);
       setLoading(false);
       return;

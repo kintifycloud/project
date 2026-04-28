@@ -35,7 +35,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const checkSession = async () => {
       if (!supabaseAuth) {
-        console.error("[Auth Context] ERROR: supabaseAuth is null");
+        console.warn("[Auth Context] Supabase not configured - running without authentication");
+        setUser(null);
+        setSession(null);
         setLoading(false);
         return;
       }
