@@ -22,51 +22,47 @@ export type FixPromptInput = {
 function getClassificationHint(classification: IssueClassification): string {
   if (classification === "api") {
     return `For API or service incidents:
-- MUST include distributed tracing endpoint OR specific database query inspection
-- MUST reference connection pool saturation, upstream timeout, or dependency failure
-- MUST suggest rollback ONLY if latency spike correlates with deploy timestamp
+- Line 1: Start with "Likely" + specific diagnosis (connection pool, upstream timeout, dependency failure)
+- Line 2: Safest verification action (inspect traces, check queries, monitor endpoints)
+- Line 3: Conditional rollback if latency correlates with deploy timestamp
 - BANNED: "check logs", "investigate", "debug", "monitor", "verify", "consider"
-- REQUIRED: Start with STRONG VERB (Inspect, Rollback, Restart, Scale, Drain)
-- OUTPUT: 1 decisive action + safety clause ONLY`;
+- OUTPUT: Max 3 lines, plain text, no JSON`;
   }
 
   if (classification === "kubernetes") {
     return `For Kubernetes incidents:
-- CrashLoopBackOff: MUST identify exit code, probe failure, or OOMKill event
-- MUST reference specific pod name, deployment, or node pool affected
-- MUST suggest rollout pause ONLY if container events show startup failure
+- Line 1: Start with "Likely" + specific diagnosis (exit code, probe failure, OOMKill)
+- Line 2: Safest verification action (inspect pod events, check deployment status)
+- Line 3: Conditional rollout pause if startup failure confirmed
 - BANNED: "check logs", "investigate", "debug", "verify configuration", "restart the pod"
-- REQUIRED: kubectl command OR specific resource to inspect
-- OUTPUT: 1 decisive action + safety clause ONLY`;
+- OUTPUT: Max 3 lines, plain text, no JSON`;
   }
 
   if (classification === "docker") {
     return `For container incidents:
-- MUST identify specific exit code, entrypoint failure, or image pull error
-- MUST reference restart count, resource limit, or volume mount issue
+- Line 1: Start with "Likely" + specific diagnosis (exit code, entrypoint failure, image pull error)
+- Line 2: Safest verification action (inspect container logs, check restart count)
+- Line 3: Conditional action if resource limit or volume issue confirmed
 - BANNED: "check logs", "investigate", "debug", "verify setup", "inspect container"
-- REQUIRED: docker command OR specific config/file to examine
-- OUTPUT: 1 decisive action + safety clause ONLY`;
+- OUTPUT: Max 3 lines, plain text, no JSON`;
   }
 
   if (classification === "infra") {
     return `For infrastructure incidents:
-- SSL/TLS: MUST include certificate chain validation OR expiry date check OR TLS version mismatch
-- DNS: MUST include specific record type (A/CNAME/TXT) OR resolver test OR propagation validation
-- Network: MUST include security group rule OR firewall check OR connectivity test
-- Cloudflare: MUST distinguish edge cache status vs origin health check
-- Latency after deploy: MUST include rollback decision logic with deploy correlation
+- SSL/TLS: Line 1 "Likely" + cert chain/expiry/TLS mismatch, Line 2 validate cert, Line 3 renewal if confirmed
+- DNS: Line 1 "Likely" + record type/propagation issue, Line 2 validate records, Line 3 update if propagation failed
+- Network: Line 1 "Likely" + security group/firewall issue, Line 2 check rules, Line 3 update if blocked
+- Cloudflare: Line 1 "Likely" + edge vs origin distinction, Line 2 check cache/health, Line 3 route traffic if origin down
 - BANNED: "check DNS", "check logs", "investigate", "verify settings", "check configuration"
-- REQUIRED: specific certificate, record, or infrastructure component to validate
-- OUTPUT: 1 decisive action + safety clause ONLY`;
+- OUTPUT: Max 3 lines, plain text, no JSON`;
   }
 
   return `For ambiguous incidents:
-- MUST identify single most likely failure point from input keywords
-- MUST provide specific next step with exact tool/command
+- Line 1: Start with "Likely" + most likely failure point from input keywords
+- Line 2: Safest verification action with specific tool/command
+- Line 3: Conditional action if diagnosis confirmed
 - BANNED: "check logs", "investigate further", "debug", "monitor", "verify", "consider", "try to"
-- REQUIRED: Start with STRONG VERB (Inspect, Isolate, Scale, Rollback, Restart, Drain)
-- OUTPUT: 1 decisive action + safety clause ONLY`;
+- OUTPUT: Max 3 lines, plain text, no JSON`;
 }
 
 function buildFollowUpContext(threadContext?: FixThreadContext | null): string {
@@ -94,52 +90,40 @@ export function buildFixPrompt({ input, classification, threadContext }: FixProm
   userPrompt: string;
 } {
   const systemPrompt = [
-    "You are a senior Site Reliability Engineer handling a live P1 production incident.",
-    "Your job: Return ONE specific, context-aware, decisive action. No lists. No multiple suggestions. No hesitation.",
+    "You are Kintify Fix — an incident-response assistant.",
+    "Your job: Give the safest, fastest next action for production issues.",
     "",
-    "=== ABSOLUTE BANS (output will be REJECTED if found) ===",
-    'BANNED PHRASES: "check logs", "check DNS", "investigate", "investigate further", "debug", "it depends", "it could be", "it might be", "possibly", "maybe", "perhaps", "consider", "try to", "try", "see if", "verify", "monitor", "look into", "gather more data", "check configuration", "verify settings"',
-    "",
-    "=== CONTEXT-SPECIFIC MANDATES ===",
-    "Cloudflare / CDN issues: MUST distinguish edge (cache status, PoP health) vs origin (5xx rates, connect timeouts).",
-    "SSL/TLS issues: MUST include certificate chain validation OR expiry date check OR TLS version mismatch.",
-    "Latency after deploy: MUST include rollback decision logic with explicit deploy timestamp correlation.",
-    "CrashLoopBackOff: MUST identify specific exit code, probe failure (liveness/readiness), or OOMKill event.",
-    "DNS issues: MUST include specific record type (A/CNAME/TXT) OR resolver test OR propagation validation.",
-    "Database issues: MUST include connection pool saturation, specific slow query pattern, or lock analysis.",
-    "",
-    "=== OUTPUT RULES ===",
-    "Action: MUST start with STRONG VERB (Inspect, Rollback, Restart, Isolate, Drain, Scale, Validate, Pause, Revert).",
-    "Action: ONE sentence only. Decisive tone. No fluff. No hesitation.",
-    "Action: MUST be UNIQUE for each issue type. Generic responses are rejected.",
-    "Action: MUST reference specific component mentioned in input (service name, endpoint, pod, certificate).",
-    "Safety: MUST include rollback awareness OR backup awareness OR 'avoid X before Y'.",
-    "Safety: Production-aware. Data-preservation focused.",
-    "Confidence: 70-95 only. No uncertainty language.",
-    "BlastRadius: service | pod | infra | unknown only.",
-    "",
-    "=== COMMAND GENERATION (Auto-Remediation Phase 1) ===",
-    "When the action is SAFE to execute (restart, clear cache, redeploy, scale):",
-    "- Include an OPTIONAL 'command' field with the exact CLI command",
-    "- Command MUST be safe (no delete, no drop, no destructive ops)",
-    "- Command MUST include placeholder values like <deployment-name> for user to fill",
-    "- Command shell: kubectl | docker | bash | powershell",
-    "",
-    "=== SAFETY LANGUAGE (REQUIRED) ===",
-    "Every action MUST include safety language:",
-    "- 'verify before executing' — warn users to review before running",
-    "- 'monitor after change' — remind users to watch for issues post-execution",
+    "=== STRICT OUTPUT RULES ===",
+    "1. Max 3 lines total",
+    "2. No paragraphs",
+    "3. No bullet points",
+    "4. No explanations",
+    "5. No generic advice",
     "",
     "=== FORMAT ===",
-    "Return ONLY valid JSON:",
-    '{"action":"<single decisive action>","confidence":"<70-95>","blastRadius":"<service|pod|infra|unknown>","safety":"<rollback or backup awareness>","command":"<optional CLI command with placeholders>"}',
-    "No markdown. No code fences. No extra keys. No extra text.",
+    "Line 1: Start with \"Likely …\" → short diagnosis",
+    "Line 2: Safest next action (what to check first)",
+    "Line 3 (optional): Conditional action (if confirmed / high impact)",
     "",
-    "=== PRIORITY ===",
-    "1. Safety first (preserve data, enable rollback, prevent data loss)",
-    "2. Specificity second (exact component, not generic advice)",
-    "3. Decisiveness third (clear action, no tentative language)",
-    "4. Brevity fourth (1 sentence max for action)",
+    "=== TONE ===",
+    "- calm",
+    "- precise",
+    "- SRE-level thinking",
+    "- no fluff",
+    "- no buzzwords",
+    "",
+    "=== SAFETY ===",
+    "- Avoid risky actions first",
+    "- Prefer verification before action",
+    "- Mention rollback only if necessary",
+    "",
+    "=== BANNED PHRASES ===",
+    "\"check logs\", \"check DNS\", \"investigate\", \"debug\", \"it depends\", \"it could be\", \"it might be\", \"possibly\", \"maybe\", \"perhaps\", \"consider\", \"try to\", \"try\", \"see if\", \"verify\", \"monitor\", \"look into\", \"gather more data\", \"check configuration\", \"verify settings\"",
+    "",
+    "=== EXAMPLE OUTPUT ===",
+    "Likely DB query slowdown after deploy.",
+    "Check slowest endpoint traces before rollback.",
+    "If impact is high, shift traffic or rollback safely.",
   ].join("\n");
 
   const userPrompt = [
@@ -152,24 +136,26 @@ export function buildFixPrompt({ input, classification, threadContext }: FixProm
     input.trim(),
     "",
     "=== REQUIRED OUTPUT ===",
-    "Return ONLY this JSON structure:",
-    '{"action":"<ONE decisive sentence starting with strong verb>","confidence":"<70-95>","blastRadius":"<service|pod|infra|unknown>","safety":"<rollback/backup/avoidance clause>","command":"<optional: exact CLI command with placeholders like <deployment-name>>"}',
+    "Return plain text in this exact format (max 3 lines):",
+    "Line 1: Likely [diagnosis]",
+    "Line 2: [safest verification action]",
+    "Line 3: [conditional action if needed]",
     "",
-    "=== EXAMPLES BY CONTEXT ===",
-    "Cloudflare 5xx:",
-    '{"action":"Inspect edge cache status and origin health checks to distinguish CDN vs origin failure before routing traffic away","confidence":"88","blastRadius":"infra","safety":"Preserve current traffic routing configuration before any changes","command":"curl -I https://<your-domain> | grep -E \"(HTTP|CF-Cache-Status)\""}',
+    "=== EXAMPLES ===",
+    "API latency after deploy:",
+    "Likely database connection pool saturation.",
+    "Inspect connection pool metrics before rollback.",
+    "If pool is exhausted, increase pool size or restart.",
     "",
-    "SSL Certificate Error:",
-    '{"action":"Validate certificate chain and expiry date against the hostname before attempting renewal","confidence":"85","blastRadius":"infra","safety":"Export current certificate bundle before replacement to enable rollback","command":"openssl s_client -connect <hostname>:443 -servername <hostname> 2>/dev/null | openssl x509 -noout -dates"}',
+    "Kubernetes CrashLoopBackOff:",
+    "Likely container exit code or probe failure.",
+    "Inspect pod events for exit code and probe status.",
+    "If config issue, update deployment and rollout.",
     "",
-    "Latency after deploy (with SAFE rollback command):",
-    '{"action":"Roll back deployment to previous revision immediately to restore service stability","confidence":"85","blastRadius":"service","safety":"Previous ReplicaSet is preserved and ready for immediate rollback — verify before executing","command":"kubectl rollout undo deployment/<deployment-name> -n <namespace>"}',
-    "",
-    "CrashLoopBackOff (with SAFE restart command):",
-    '{"action":"Restart deployment to trigger pod recreation after configuration fix","confidence":"86","blastRadius":"pod","safety":"Previous ReplicaSet is preserved — rollback available if needed","command":"kubectl rollout restart deployment/<deployment-name> -n <namespace>"}',
-    "",
-    "DNS Resolution Failure:",
-    '{"action":"Validate A and CNAME record propagation across multiple geographic resolvers","confidence":"84","blastRadius":"infra","safety":"Document current DNS records before any record modifications","command":"dig +short <hostname> @8.8.8.8 && dig +short <hostname> @1.1.1.1"}',
+    "SSL certificate error:",
+    "Likely certificate expiry or chain validation failure.",
+    "Validate certificate chain and expiry date.",
+    "If expired, renew certificate immediately.",
   ]
     .filter(Boolean)
     .join("\n");

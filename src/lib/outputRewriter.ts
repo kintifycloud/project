@@ -253,6 +253,18 @@ export function rewriteDecisionToNaturalText(decision: FixDecision): string {
 
   let text = context.action;
 
+  // Check if already in new plain text format (starts with "Likely", has newlines)
+  const isNewFormat = text.toLowerCase().startsWith('likely') && text.includes('\n');
+  
+  if (isNewFormat) {
+    // Minimal cleanup for new format - preserve structure
+    text = removeMarkdownArtifacts(text);
+    text = removeGenericPhrases(text);
+    text = limitCharacterCount(text, 300); // New spec: max 300 chars
+    return text.trim();
+  }
+
+  // Legacy processing for old JSON format
   text = removeMarkdownArtifacts(text);
   text = removeGenericPhrases(text);
   text = removeDuplicateWords(text);

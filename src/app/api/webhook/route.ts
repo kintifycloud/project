@@ -16,6 +16,7 @@ import {
   recordIntegrationEvent,
 } from "@/lib/integrations/core";
 import type { WebhookIntegration } from "@/lib/integrations/types";
+import { createWebhookIncident } from "@/lib/team-mode";
 
 // CORS headers for webhook endpoints
 const corsHeaders = {
@@ -118,6 +119,21 @@ export async function POST(req: NextRequest): Promise<Response> {
       input: fixInput,
       triggered: true,
     }, fixResult);
+
+    // Create incident automatically (STEP 5)
+    try {
+      await createWebhookIncident({
+        input: fixInput,
+        output: fixResult.answer,
+        trace: fixResult.trace,
+        teamId: integration.teamId,
+        createdBy: integration.createdBy,
+        createdByEmail: "webhook@kintify.cloud",
+      });
+    } catch (incidentError) {
+      console.error("[Webhook] Failed to create incident:", incidentError);
+      // Don't fail the webhook if incident creation fails
+    }
 
     // If Slack integration exists for this team, push the result
     await maybePushToSlack(integration.teamId, fixInput, fixResult);

@@ -4,18 +4,17 @@ import { supabase } from '../../../lib/supabase';
 import { isKeyRateLimited, validateApiKey } from '@/lib/auth';
 import { classifyIssue, type IssueClassification } from '@/lib/classifier';
 import { routeFixDecision } from '@/lib/llmRouter';
-import { VAGUE_INPUT_DECISION, toStrictDecision, type FixDecision } from '@/lib/normalize';
+import { VAGUE_INPUT_DECISION, toStrictDecision } from '@/lib/normalize';
 import { type FixThreadContext, type FixThreadTurn } from '@/lib/fixPrompt';
-import { assertHighQuality } from '@/lib/qualityCheck';
 import { rewriteDecisionToNaturalText } from '@/lib/outputRewriter';
 import { recordQuery, recordQueryResponse } from '@/lib/queryStore';
 import { supabaseAdmin } from '@/lib/supabase-admin';
-// import { buildTracePrompt } from '@/lib/tracePrompt'; // Unused - reserved for future trace feature
+import { createEvaluationRecord, cacheResponse, getCachedResponse } from '@/lib/evaluation';
 
-type ProviderName = "gemini" | "deepseek" | "mistral" | "openrouter";
+type ProviderName = "gemini" | "deepseek" | "mistral" | "openrouter" | "fallback" | "cache";
 
-const FIX_RATE_LIMIT_MAX_REQUESTS = 30;
-const FIX_RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
+const FIX_RATE_LIMIT_MAX_REQUESTS = 5; // STEP 9: Max 5 requests per IP
+const FIX_RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000; // 1 hour window
 const fixRateLimitStore = new Map<string, { count: number; resetAt: number }>();
 
 function getClientIp(request: Request): string {
@@ -53,51 +52,6 @@ function getRateLimitResponse(request: Request): Response | null {
   current.count += 1;
   fixRateLimitStore.set(ip, current);
   return null;
-}
-
-function buildEmergencyDecision(classification: IssueClassification): FixDecision {
-  if (classification === 'api') {
-    return {
-      action: 'Inspect distributed traces for slow endpoints and database connection pool saturation before rolling back the deployment',
-      confidence: '82',
-      blastRadius: 'service',
-      safety: 'Preserve current deployment revision and distributed trace data before revert',
-    };
-  }
-
-  if (classification === 'kubernetes') {
-    return {
-      action: 'Inspect pod events for exit codes, probe failures, or OOMKill events to identify startup failure cause',
-      confidence: '80',
-      blastRadius: 'pod',
-      safety: 'Keep previous ReplicaSet ready for immediate rollback if config issue confirmed',
-    };
-  }
-
-  if (classification === 'docker') {
-    return {
-      action: 'Inspect container exit code and restart count to identify entrypoint failure or resource constraint',
-      confidence: '78',
-      blastRadius: 'pod',
-      safety: 'Preserve current container configuration and environment variables before image replacement',
-    };
-  }
-
-  if (classification === 'infra') {
-    return {
-      action: 'Inspect certificate chain validity and DNS record propagation before reverting infrastructure changes',
-      confidence: '81',
-      blastRadius: 'infra',
-      safety: 'Export current certificate bundle and DNS records before any modifications',
-    };
-  }
-
-  return {
-    action: 'Inspect error patterns and recent configuration changes to identify the specific failure point',
-    confidence: '74',
-    blastRadius: 'unknown',
-    safety: 'Document current state and preserve configuration snapshots before any changes',
-  };
 }
 
 // Build contextual trace based on classification and input
@@ -292,8 +246,8 @@ export async function POST(req: Request) {
     const body = await req.json();
     const input = body.input?.trim();
     const threadContext = parseThreadContext(body.thread);
-    const browserIdRaw = body.browserId?.trim() || req.headers.get('x-kintify-browser-id')?.trim();
-    const browserId = browserIdRaw || undefined;
+    // const browserIdRaw = body.browserId?.trim() || req.headers.get('x-kintify-browser-id')?.trim();
+    // const browserId = browserIdRaw || undefined;
 
     const isEnterpriseApiRequest = apiKeyAuth?.valid === true && apiKeyAuth.meta.tier === 'enterprise';
     const isPriorityRequest = req.headers.get('x-kintify-priority') === 'true' || body.priority === true || isEnterpriseApiRequest;
@@ -336,6 +290,38 @@ export async function POST(req: Request) {
     }
 
     await recordQuery({ text: input });
+
+    // Check cache for proven patterns (Data Moat: STEP 5)
+    const cachedResponse = await getCachedResponse(input);
+    if (cachedResponse) {
+      const classification = await classifyIssue(input);
+      const traceText = buildContextualTrace(classification.type, input, cachedResponse);
+      await recordQueryResponse(input, cachedResponse);
+      saveFixHistory(input, cachedResponse, "cache");
+
+      logger.emit({
+        severityText: 'INFO',
+        body: 'Returning cached response from proven patterns',
+        attributes: {
+          'api.route': '/api/fix',
+          'response.type': 'cached',
+          'processing.time.ms': String(Date.now() - startTime),
+        },
+      });
+
+      return Response.json({
+        answer: cachedResponse,
+        trace: traceText,
+      }, {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Fix-Provider': 'cache',
+          'X-Fix-Classification': classification.type,
+          'X-Kintify-Priority-Tier': priorityTier,
+        },
+      });
+    }
 
     if (!process.env.GEMINI_API_KEY && !process.env.DEEPSEEK_API_KEY && !process.env.MISTRAL_API_KEY && !process.env.OPENROUTER_API_KEY) {
       logger.emit({
@@ -408,15 +394,34 @@ export async function POST(req: Request) {
         input,
         classification: classification.type,
       });
-      const decision = assertHighQuality(toStrictDecision(routed.decision), input, browserId);
-      const naturalText = rewriteDecisionToNaturalText(decision);
+      
+      // New format: raw is plain text, use directly
+      const naturalText = routed.raw;
 
-      // Generate trace summary
-      const traceText = buildContextualTrace(classification.type, input, decision.action);
+      // Generate trace summary (use plain text as action)
+      const traceText = buildContextualTrace(classification.type, input, naturalText);
 
       console.log(`[Fix API] Using provider ${routed.provider}`);
       await recordQueryResponse(input, naturalText);
       saveFixHistory(input, naturalText, routed.provider);
+
+      // Create evaluation record (STEP 1 & 5)
+      const evaluation = await createEvaluationRecord({
+        input,
+        output: naturalText,
+        modelUsed: routed.provider,
+      });
+      console.log(`[Fix API] Evaluation score: ${evaluation.score}, valid: ${evaluation.isValid}`);
+
+      // Cache high-quality responses (STEP 11)
+      if (evaluation.score >= 70) {
+        await cacheResponse({
+          input,
+          output: naturalText,
+          modelUsed: routed.provider,
+          score: evaluation.score,
+        });
+      }
 
       logger.emit({
         severityText: 'INFO',
@@ -446,6 +451,7 @@ export async function POST(req: Request) {
       return Response.json({
         answer: naturalText,
         trace: traceText,
+        evaluationId: evaluation.isValid ? null : undefined, // Only include if we want to track feedback
       }, {
         status: 200,
         headers: {
@@ -456,15 +462,22 @@ export async function POST(req: Request) {
         },
       });
     } catch (error) {
-      const fallbackDecision = buildEmergencyDecision(classification.type);
-      const safeDecision = assertHighQuality(toStrictDecision(fallbackDecision), input, browserId);
-      const naturalText = rewriteDecisionToNaturalText(safeDecision);
-      const traceText = buildContextualTrace(classification.type, input, safeDecision.action);
+      // New format fallback message
+      const naturalText = "Likely unclear issue. Check logs and recent changes to isolate failure.";
+      const traceText = buildContextualTrace(classification.type, input, naturalText);
       const message = error instanceof Error ? error.message : String(error);
 
       console.log(`[Fix API] Falling back to emergency decision: ${message}`);
       await recordQueryResponse(input, naturalText);
-      saveFixHistory(input, naturalText, 'openrouter');
+      saveFixHistory(input, naturalText, 'fallback');
+
+      // Create evaluation record for fallback (STEP 1 & 5)
+      const evaluation = await createEvaluationRecord({
+        input,
+        output: naturalText,
+        modelUsed: 'fallback',
+      });
+      console.log(`[Fix API] Fallback evaluation score: ${evaluation.score}, valid: ${evaluation.isValid}`);
 
       logger.emit({
         severityText: 'WARN',

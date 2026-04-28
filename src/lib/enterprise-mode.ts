@@ -91,6 +91,7 @@ type IncidentRow = {
   status: "open" | "resolved";
   team_id: string | null;
   organization_id: string | null;
+  is_public: boolean;
 };
 
 type AuditLogRow = {
@@ -177,6 +178,7 @@ function mapIncidentRow(row: IncidentRow): IncidentRecord {
     status: row.status,
     teamId: row.team_id,
     organizationId: row.organization_id,
+    isPublic: row.is_public,
   };
 }
 

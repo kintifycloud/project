@@ -17,6 +17,8 @@ import {
   MessageSquare,
   FileCode,
   Crown,
+  ThumbsUp,
+  ThumbsDown,
 } from "lucide-react";
 import { getKintifyOutputTrustBadge } from "@/lib/aeo";
 import { buildCheckoutUrl } from "@/lib/checkout";
@@ -584,6 +586,61 @@ function InputTypeIndicator({ type }: { type: InputType }) {
   );
 }
 
+// Feedback buttons for evaluation (STEP 4)
+function FeedbackButtons({ onFeedback, feedbackGiven }: { onFeedback: (feedback: boolean) => void; feedbackGiven: boolean | null }) {
+  if (feedbackGiven !== null) {
+    return (
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        className="flex items-center gap-2 text-xs text-zinc-500"
+      >
+        {feedbackGiven ? (
+          <span className="flex items-center gap-1 text-green-400">
+            <ThumbsUp className="h-3.5 w-3.5" />
+            Thanks for the feedback!
+          </span>
+        ) : (
+          <span className="flex items-center gap-1 text-zinc-400">
+            <ThumbsDown className="h-3.5 w-3.5" />
+            We&apos;ll improve next time
+          </span>
+        )}
+      </motion.div>
+    );
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      className="flex items-center gap-2"
+    >
+      <span className="text-xs text-zinc-500">Was this helpful?</span>
+      <motion.button
+        type="button"
+        onClick={() => onFeedback(true)}
+        whileHover={{ scale: 1.1 }}
+        whileTap={{ scale: 0.95 }}
+        className="rounded-lg border border-zinc-700/50 bg-zinc-800/50 p-1.5 text-zinc-400 transition-colors hover:border-green-500/30 hover:text-green-400"
+        title="Helpful"
+      >
+        <ThumbsUp className="h-3.5 w-3.5" />
+      </motion.button>
+      <motion.button
+        type="button"
+        onClick={() => onFeedback(false)}
+        whileHover={{ scale: 1.1 }}
+        whileTap={{ scale: 0.95 }}
+        className="rounded-lg border border-zinc-700/50 bg-zinc-800/50 p-1.5 text-zinc-400 transition-colors hover:border-red-500/30 hover:text-red-400"
+        title="Not helpful"
+      >
+        <ThumbsDown className="h-3.5 w-3.5" />
+      </motion.button>
+    </motion.div>
+  );
+}
+
 // STEP 6: Inline command pills
 function InlineCommandPills({ onSelect, lastInput }: { onSelect: (cmd: string) => void; lastInput: string }) {
   if (!lastInput) return null;
@@ -634,6 +691,7 @@ export function FixDecisionPage() {
   const [trace, setTrace] = useState<string | null>(null);
   const [showTrace, setShowTrace] = useState(false);
   const [hasSubmitted, setHasSubmitted] = useState(false);
+  const [feedbackGiven, setFeedbackGiven] = useState<boolean | null>(null);
   
   // STEP 8: Focus Mode
   const [focusMode, setFocusMode] = useState(() => readFocusMode());
@@ -1045,6 +1103,7 @@ export function FixDecisionPage() {
     setDisplayedResult("");
     setThread(null);
     setLastSubmittedInput("");
+    setFeedbackGiven(null);
     // Reset complete
     writeFixThreadState(null);
     if (typeof window !== "undefined") {
@@ -1055,6 +1114,24 @@ export function FixDecisionPage() {
       }
     }
     textareaRef.current?.focus();
+  }, []);
+
+  const handleFeedback = useCallback(async (feedback: boolean) => {
+    setFeedbackGiven(feedback);
+    
+    // Send feedback to evaluation system (STEP 4)
+    try {
+      await fetch("/api/evaluation/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          recordId: "temp", // TODO: Pass actual evaluation record ID from API response
+          feedback,
+        }),
+      });
+    } catch {
+      // Silently fail - feedback is optional
+    }
   }, []);
 
   // STEP 8: Toggle focus mode
@@ -1457,6 +1534,16 @@ export function FixDecisionPage() {
                 <p className="mt-3 text-xs text-zinc-500">
                   {getKintifyOutputTrustBadge()}
                 </p>
+
+                {/* STEP 4: Feedback buttons for evaluation */}
+                {!isTyping && (
+                  <div className="mt-4">
+                    <FeedbackButtons 
+                      onFeedback={handleFeedback} 
+                      feedbackGiven={feedbackGiven} 
+                    />
+                  </div>
+                )}
 
                 {!isTyping && !hasProAccess(plan) ? (
                   <div className="mt-4 rounded-xl border border-indigo-500/15 bg-indigo-500/[0.05] px-4 py-3 text-sm text-zinc-300">

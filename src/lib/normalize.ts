@@ -142,22 +142,60 @@ function fromLabeledText(raw: string): FixDecision {
   };
 }
 
+// NEW: Parse plain text format (max 3 lines starting with "Likely")
+function fromPlainText(raw: string): FixDecision {
+  const cleaned = stripFormatting(raw);
+  const lines = cleaned.split('\n').filter(line => line.trim().length > 0);
+  
+  // Extract action (the full plain text output)
+  const action = lines.slice(0, 3).join(' ').trim();
+  
+  // Infer confidence from quality (starts with "Likely" = higher confidence)
+  const confidence = action.toLowerCase().startsWith('likely') ? '85' : '70';
+  
+  // Infer blast radius from keywords
+  const blastRadius = normalizeBlastRadiusValue(action);
+  
+  // Infer safety from content (mention of rollback, verify, check = safer)
+  const safety = action.toLowerCase().includes('rollback') || 
+                 action.toLowerCase().includes('verify') ||
+                 action.toLowerCase().includes('before') 
+                 ? 'Preserve current state before changes' 
+                 : 'Document current state before action';
+
+  return {
+    action,
+    confidence,
+    blastRadius,
+    safety,
+  };
+}
+
 export function normalizeDecision(raw: unknown): FixDecision {
+  // Handle plain text format (new format)
+  if (typeof raw === "string") {
+    const trimmed = raw.trim();
+    
+    // Check if it's plain text (not JSON, starts with "Likely")
+    if (!trimmed.startsWith('{') && trimmed.toLowerCase().startsWith('likely')) {
+      return fromPlainText(trimmed);
+    }
+    
+    // Try JSON parsing for backward compatibility
+    const parsed = parseJsonCandidate(trimmed);
+    if (parsed) {
+      return fromObject(parsed);
+    }
+    
+    // Fall back to labeled text
+    return fromLabeledText(trimmed);
+  }
+
   if (raw && typeof raw === "object") {
     return fromObject(raw as Record<string, unknown>);
   }
 
-  if (typeof raw !== "string") {
-    throw new Error("Model output is not readable");
-  }
-
-  const parsed = parseJsonCandidate(raw);
-
-  if (parsed) {
-    return fromObject(parsed);
-  }
-
-  return fromLabeledText(raw);
+  throw new Error("Model output is not readable");
 }
 
 export function toStrictDecision(decision: FixDecision): FixDecision {

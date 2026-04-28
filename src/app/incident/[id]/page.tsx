@@ -3,13 +3,13 @@
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { ArrowRight, CheckCircle2, Clock, Copy, RotateCcw } from "lucide-react";
+import { ArrowRight, CheckCircle2, Clock, Copy, Eye, EyeOff, RotateCcw, Share2 } from "lucide-react";
 
 import { useAuth } from "@/lib/auth-context";
 import { useEnterprise } from "@/lib/enterprise-context";
 import { formatRelativeTime } from "@/lib/history";
 import { type AuditLogRecord } from "@/lib/enterprise-mode";
-import { getIncidentById, normalizeError, updateIncidentStatus, type IncidentRecord } from "@/lib/team-mode";
+import { getIncidentById, normalizeError, updateIncidentPrivacy, updateIncidentStatus, type IncidentRecord } from "@/lib/team-mode";
 
 export default function IncidentDetailPage() {
   const params = useParams<{ id: string }>();
@@ -22,6 +22,7 @@ export default function IncidentDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [statusLoading, setStatusLoading] = useState(false);
+  const [privacyLoading, setPrivacyLoading] = useState(false);
 
   const incidentId = typeof params?.id === "string" ? params.id : "";
 
@@ -106,6 +107,41 @@ export default function IncidentDetailPage() {
     }
   };
 
+  const handlePrivacyToggle = async () => {
+    if (!incident) {
+      return;
+    }
+
+    setPrivacyLoading(true);
+    setError(null);
+
+    try {
+      const updated = await updateIncidentPrivacy(incident.id, !incident.isPublic);
+      setIncident(updated);
+      await trackAudit({
+        action: updated.isPublic ? "incident.made_public" : "incident.made_private",
+        incidentId: updated.id,
+        metadata: {
+          isPublic: updated.isPublic,
+        },
+      });
+    } catch (privacyError) {
+      setError(normalizeError(privacyError, "Could not update incident privacy."));
+    } finally {
+      setPrivacyLoading(false);
+    }
+  };
+
+  const handleSlackShare = () => {
+    if (!incident) return;
+    const shareUrl = `https://kintify.cloud/share/${incident.id}`;
+    const text = `Check out this fix: ${incident.input.slice(0, 50)}...`;
+    window.open(
+      `https://slack.com/share?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(text)}`,
+      '_blank'
+    );
+  };
+
   return (
     <main className="min-h-screen bg-zinc-950 text-zinc-100">
       <div className="mx-auto w-full max-w-3xl px-4 py-10 sm:px-6 sm:py-16">
@@ -161,6 +197,25 @@ export default function IncidentDetailPage() {
                 >
                   <Copy className="h-4 w-4" />
                   {copied ? "Copied" : "Copy link"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handlePrivacyToggle()}
+                  disabled={privacyLoading}
+                  className="inline-flex items-center gap-2 rounded-xl border border-zinc-700 px-4 py-2.5 text-sm text-zinc-200 transition-colors hover:border-zinc-600 hover:text-white disabled:opacity-60"
+                  title={incident.isPublic ? "Make private" : "Make public"}
+                >
+                  {incident.isPublic ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  {incident.isPublic ? "Private" : "Public"}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSlackShare}
+                  className="inline-flex items-center gap-2 rounded-xl border border-zinc-700 px-4 py-2.5 text-sm text-zinc-200 transition-colors hover:border-zinc-600 hover:text-white"
+                  title="Share to Slack"
+                >
+                  <Share2 className="h-4 w-4" />
+                  Slack
                 </button>
                 <button
                   type="button"

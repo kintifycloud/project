@@ -31,6 +31,7 @@ export type IncidentRecord = {
   status: IncidentStatus;
   teamId: string | null;
   organizationId: string | null;
+  isPublic: boolean;
 };
 
 export type InviteLinkResult = {
@@ -83,6 +84,7 @@ type IncidentRow = {
   status: IncidentStatus;
   team_id: string | null;
   organization_id: string | null;
+  is_public: boolean;
 };
 
 function getClient() {
@@ -158,6 +160,7 @@ function mapIncidentRow(row: IncidentRow): IncidentRecord {
     status: row.status,
     teamId: row.team_id,
     organizationId: row.organization_id,
+    isPublic: row.is_public,
   };
 }
 
@@ -616,7 +619,7 @@ export async function getIncidentById(incidentId: string): Promise<IncidentRecor
   const client = getClient();
   const { data, error } = await client
     .from("incidents")
-    .select("id, input, output, trace, created_by, created_by_email, created_at, updated_at, status, team_id, organization_id")
+    .select("id, input, output, trace, created_by, created_by_email, created_at, updated_at, status, team_id, organization_id, is_public")
     .eq("id", incidentId)
     .maybeSingle<IncidentRow>();
 
@@ -625,4 +628,102 @@ export async function getIncidentById(incidentId: string): Promise<IncidentRecor
   }
 
   return data ? mapIncidentRow(data) : null;
+}
+
+export async function getPublicIncidentById(incidentId: string): Promise<IncidentRecord | null> {
+  const client = getClient();
+  const { data, error } = await client
+    .from("incidents")
+    .select("id, input, output, trace, created_by, created_by_email, created_at, updated_at, status, team_id, organization_id, is_public")
+    .eq("id", incidentId)
+    .eq("is_public", true)
+    .maybeSingle<IncidentRow>();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return data ? mapIncidentRow(data) : null;
+}
+
+export async function updateIncidentPrivacy(incidentId: string, isPublic: boolean): Promise<IncidentRecord> {
+  const client = getClient();
+  const { data, error } = await client
+    .from("incidents")
+    .update({ is_public: isPublic, updated_at: new Date().toISOString() })
+    .eq("id", incidentId)
+    .select("id, input, output, trace, created_by, created_by_email, created_at, updated_at, status, team_id, organization_id, is_public")
+    .single<IncidentRow>();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return mapIncidentRow(data);
+}
+
+export async function createWebhookIncident(params: {
+  input: string;
+  output: string;
+  trace: string | null;
+  teamId: string | null;
+  createdBy: string;
+  createdByEmail: string;
+}): Promise<IncidentRecord> {
+  const client = getClient();
+  const { input, output, trace, teamId, createdBy, createdByEmail } = params;
+
+  const { data, error } = await client
+    .from("incidents")
+    .insert({
+      input: input.trim(),
+      output: output.trim(),
+      trace,
+      created_by: createdBy,
+      created_by_email: createdByEmail,
+      status: "open",
+      team_id: teamId,
+      organization_id: null,
+      is_public: false,
+    })
+    .select("id, input, output, trace, created_by, created_by_email, created_at, updated_at, status, team_id, organization_id, is_public")
+    .single<IncidentRow>();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return mapIncidentRow(data);
+}
+
+export async function getPublicIncidents(limit = 20): Promise<IncidentRecord[]> {
+  const client = getClient();
+  const { data, error } = await client
+    .from("incidents")
+    .select("id, input, output, trace, created_by, created_by_email, created_at, updated_at, status, team_id, organization_id, is_public")
+    .eq("is_public", true)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return (data ?? []).map(mapIncidentRow);
+}
+
+export async function getRecentIncidents(user: User, limit = 10): Promise<IncidentRecord[]> {
+  const client = getClient();
+  const { data, error } = await client
+    .from("incidents")
+    .select("id, input, output, trace, created_by, created_by_email, created_at, updated_at, status, team_id, organization_id, is_public")
+    .or(`created_by.eq.${user.id},team_id.in.(select team_id from team_members where user_id = ${user.id})`)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return (data ?? []).map(mapIncidentRow);
 }
